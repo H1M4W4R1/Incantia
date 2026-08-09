@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using H1M4W4R1.Incantia.Database;
 using H1M4W4R1.Incantia.Matching;
 using H1M4W4R1.Incantia.Phonetics;
@@ -10,43 +11,49 @@ using UnityEngine;
 namespace H1M4W4R1.Incantia.Integration.QuinAI
 {
     /// <summary>
-    /// Reusable English real-time microphone-to-spell behavior backed by Quin.AI Whisper. It uses overlapping microphone
-    /// windows and voice activity gating based on Quin.AI's real-time transcription pattern. Derive from this type to add
-    /// definitions and react to accepted spells through protected callbacks.
+    /// Reusable English real-time microphone-to-spell behavior backed by Quin.AI Whisper. It transcribes each active
+    /// microphone block once, caches only its text, and recognizes against the accumulated transcript. Derive from this
+    /// type to add definitions and react to accepted spells through protected callbacks.
     /// </summary>
     [DisallowMultipleComponent]
     public abstract class EnglishRealtimeIncantationRecognitionBehaviour : MonoBehaviour
     {
-        private readonly struct PendingRecognitionWindow
+        private readonly struct PendingTranscription
         {
-            public PendingRecognitionWindow(float[] samples, long endFrame)
+            public PendingTranscription(float[] samples)
             {
                 Samples = samples;
-                EndFrame = endFrame;
             }
 
             public float[] Samples { get; }
-            public long EndFrame { get; }
+        }
+
+        private readonly struct TranscriptSegment
+        {
+            public TranscriptSegment(string text)
+            {
+                Text = text;
+            }
+
+            public string Text { get; }
         }
 
         [SerializeField] private QuinAiIncantationTranscriber _transcriber;
         [SerializeField] private float _initialStepSizeInSeconds = 1.5f;
+        [SerializeField] private float _maximumStepSizeInSeconds = 12f;
         [SerializeField] private bool _autoAdjustStepSize = true;
-        [SerializeField] private float _maximumWindowLengthInSeconds = 12f;
         [SerializeField] private float _voiceActivityThreshold = 0.004f;
         [SerializeField] private int _voiceActivityWindowCount = 3;
-        [SerializeField] private int _maximumQueuedRecognitionWindows = 8;
-        [SerializeField] private float _sameSpellRepeatGuardSeconds = 3f;
+        [SerializeField] private int _maximumQueuedTranscriptions = 8;
 
-        private readonly List<float> _previousSamples = new List<float>();
-        private readonly Queue<PendingRecognitionWindow> _pendingRecognitionWindows = new Queue<PendingRecognitionWindow>();
+        private readonly Queue<PendingTranscription> _pendingTranscriptions = new Queue<PendingTranscription>();
+        private readonly List<TranscriptSegment> _transcriptSegments = new List<TranscriptSegment>();
         private EnglishPhonemizer _phonemizer;
         private IncantationRecognizer _recognizer;
         private AudioClip _recordingClip;
         private float[] _interleavedSamples = Array.Empty<float>();
         private int _stepSizeInFrames;
-        private int _maximumWindowSizeInFrames;
-        private int _keepSizeInFrames;
+        private int _maximumStepSizeInFrames;
         private int _lastSamplePosition;
         private int _remainingVoiceWindows;
         private bool _isListening;
@@ -54,11 +61,6 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
         private bool _hasReportedReady;
         private long _nextSequence;
         private long _listeningSession;
-        private long _capturedFrameCount;
-        private long _lastRecognizedSpellEndFrame = -1;
-        private long _lastConsumedTriggerEndFrame = -1;
-        private string _lastRecognizedSnapshot = string.Empty;
-        private string _lastRecognizedSpellId = string.Empty;
         private float _recognitionStartedAt;
 
         /// <summary>True while this component is collecting microphone samples.</summary>
@@ -112,7 +114,8 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
 
             _isListening = false;
             _listeningSession++;
-            _pendingRecognitionWindows.Clear();
+            _pendingTranscriptions.Clear();
+            _transcriptSegments.Clear();
             Microphone.End(null);
             OnListeningStopped();
             return true;
@@ -240,7 +243,7 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
             }
 
             IncantationMatcher matcher = new IncantationMatcher(compiledIncantations, distance, CreateMatcherConfig());
-            _recognizer = new IncantationRecognizer(_transcriber, _phonemizer, costModel.Inventory, matcher);
+            _recognizer = new IncantationRecognizer(_phonemizer, costModel.Inventory, matcher);
         }
 
         private void RecalculateCaptureSettings()
@@ -250,9 +253,9 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
                 throw new InvalidOperationException("Initial step size must be positive.");
             }
 
-            if (_maximumWindowLengthInSeconds < _initialStepSizeInSeconds)
+            if (_maximumStepSizeInSeconds < _initialStepSizeInSeconds)
             {
-                throw new InvalidOperationException("Maximum window length must be at least the initial step size.");
+                throw new InvalidOperationException("Maximum step size must be at least the initial step size.");
             }
 
             if (_voiceActivityThreshold < 0f)
@@ -265,18 +268,12 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
                 throw new InvalidOperationException("Voice activity window count must be at least one.");
             }
 
-            if (_maximumQueuedRecognitionWindows < 1)
+            if (_maximumQueuedTranscriptions < 1)
             {
-                throw new InvalidOperationException("Maximum queued recognition windows must be at least one.");
+                throw new InvalidOperationException("Maximum queued transcriptions must be at least one.");
             }
 
-            if (_sameSpellRepeatGuardSeconds < 0f)
-            {
-                throw new InvalidOperationException("Same-spell repeat guard must not be negative.");
-            }
-
-            _maximumWindowSizeInFrames = Mathf.CeilToInt(_maximumWindowLengthInSeconds * 16000f);
-            _keepSizeInFrames = Mathf.CeilToInt(0.5f * 16000f);
+            _maximumStepSizeInFrames = Mathf.CeilToInt(_maximumStepSizeInSeconds * 16000f);
             SetStepSizeInFrames(Mathf.CeilToInt(_initialStepSizeInSeconds * 16000f));
         }
 
@@ -304,11 +301,8 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
                 return;
             }
 
-            float[] windowSamples = CreateWindowSamples(currentSamples);
-            AppendPreviousSamples(currentSamples);
             _lastSamplePosition = (_lastSamplePosition + _stepSizeInFrames) % _recordingClip.samples;
-            _capturedFrameCount += currentSamples.Length;
-            if (IsVoiceActive(windowSamples))
+            if (IsVoiceActive(currentSamples))
             {
                 _remainingVoiceWindows = _voiceActivityWindowCount;
             }
@@ -324,11 +318,11 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
 
             if (_isRecognizing)
             {
-                QueueRecognitionWindow(windowSamples, _capturedFrameCount);
+                QueueTranscription(currentSamples);
                 return;
             }
 
-            StartRecognition(windowSamples, _listeningSession, _capturedFrameCount);
+            StartRecognition(currentSamples, _listeningSession);
         }
 
         private int GetAvailableFrames(int currentPosition)
@@ -378,31 +372,6 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
             return downmixedSamples;
         }
 
-        private float[] CreateWindowSamples(float[] currentSamples)
-        {
-            int maximumPreviousLength = _maximumWindowSizeInFrames - currentSamples.Length;
-            int previousLength = Mathf.Min(_previousSamples.Count, maximumPreviousLength);
-            int previousStartIndex = _previousSamples.Count - previousLength;
-            float[] windowSamples = new float[previousLength + currentSamples.Length];
-            for (int sampleIndex = 0; sampleIndex < previousLength; sampleIndex++)
-            {
-                windowSamples[sampleIndex] = _previousSamples[previousStartIndex + sampleIndex];
-            }
-
-            Array.Copy(currentSamples, 0, windowSamples, previousLength, currentSamples.Length);
-            return windowSamples;
-        }
-
-        private void AppendPreviousSamples(float[] currentSamples)
-        {
-            _previousSamples.AddRange(currentSamples);
-            int retainedLength = _maximumWindowSizeInFrames - _keepSizeInFrames;
-            if (_previousSamples.Count > retainedLength)
-            {
-                _previousSamples.RemoveRange(0, _previousSamples.Count - retainedLength);
-            }
-        }
-
         private bool IsVoiceActive(float[] samples)
         {
             if (ReferenceEquals(samples, null) || samples.Length == 0)
@@ -419,39 +388,42 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
             return (totalAmplitude / samples.Length) > _voiceActivityThreshold;
         }
 
-        private void QueueRecognitionWindow(float[] samples, long endFrame)
+        private void QueueTranscription(float[] samples)
         {
-            if (_pendingRecognitionWindows.Count >= _maximumQueuedRecognitionWindows)
+            if (_pendingTranscriptions.Count >= _maximumQueuedTranscriptions)
             {
                 return;
             }
 
-            _pendingRecognitionWindows.Enqueue(new PendingRecognitionWindow(samples, endFrame));
+            _pendingTranscriptions.Enqueue(new PendingTranscription(samples));
         }
 
-        private void StartRecognition(float[] samples, long listeningSession, long endFrame)
+        private void StartRecognition(float[] samples, long listeningSession)
         {
             _isRecognizing = true;
             _recognitionStartedAt = Time.realtimeSinceStartup;
             OnRecognitionStarted();
-            RecognizeSamplesAsync(samples, listeningSession, _nextSequence++, endFrame);
+            RecognizeSamplesAsync(samples, listeningSession, _nextSequence++);
         }
 
-        private async void RecognizeSamplesAsync(float[] samples, long listeningSession, long sequence, long endFrame)
+        private async void RecognizeSamplesAsync(float[] samples, long listeningSession, long sequence)
         {
             try
             {
-                IncantationRecognitionRequest request = new IncantationRecognitionRequest(samples, 16000, "en", sequence);
-                IncantationRecognitionResult result = await _recognizer.RecognizeAsync(request);
-                if (_isListening && listeningSession == _listeningSession)
+                string transcript = await _transcriber.TranscribeAsync(samples, 16000, "en");
+                if (!_isListening || listeningSession != _listeningSession)
                 {
-                    OnRecognitionUpdated(result);
-                    long triggerEndFrame = CalculateTriggerEndFrame(result, samples, endFrame);
-                    if (result.Accepted && IsNewRecognizedSnapshot(result, triggerEndFrame))
-                    {
-                        ClearBufferedAudioAfterSpell(triggerEndFrame);
-                        OnSpellRecognized(result);
-                    }
+                    return;
+                }
+
+                CacheTranscript(transcript);
+                IncantationRecognitionRequest request = new IncantationRecognitionRequest(CreateCachedTranscript(), "en", sequence);
+                IncantationRecognitionResult result = _recognizer.Recognize(request);
+                OnRecognitionUpdated(result);
+                if (result.Accepted)
+                {
+                    ClearCachedTranscriptAfterSpell();
+                    OnSpellRecognized(result);
                 }
             }
             catch (Exception exception)
@@ -467,40 +439,50 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
                 if (_isListening && listeningSession == _listeningSession)
                 {
                     ApplyAutomaticStepSize();
-                    if (_pendingRecognitionWindows.Count > 0)
+                    if (_pendingTranscriptions.Count > 0)
                     {
-                        PendingRecognitionWindow pendingWindow = _pendingRecognitionWindows.Dequeue();
-                        StartRecognition(pendingWindow.Samples, listeningSession, pendingWindow.EndFrame);
+                        PendingTranscription pendingTranscription = _pendingTranscriptions.Dequeue();
+                        StartRecognition(pendingTranscription.Samples, listeningSession);
                     }
                 }
             }
         }
 
-        private bool IsNewRecognizedSnapshot(in IncantationRecognitionResult result, long triggerEndFrame)
+        private void CacheTranscript(string transcript)
         {
-            string spellId = result.Match.Best.Incantation.SpellId;
-            string snapshot = $"{spellId}|{result.NormalizedTranscript}";
-            if (string.Equals(snapshot, _lastRecognizedSnapshot, StringComparison.Ordinal))
+            if (string.IsNullOrWhiteSpace(transcript))
             {
-                return false;
+                return;
             }
 
-            long repeatGuardFrames = (long)(_sameSpellRepeatGuardSeconds * 16000f);
-            if (triggerEndFrame <= _lastConsumedTriggerEndFrame)
+            _transcriptSegments.Add(new TranscriptSegment(transcript));
+        }
+
+        private string CreateCachedTranscript()
+        {
+            if (_transcriptSegments.Count == 0)
             {
-                return false;
+                return string.Empty;
             }
 
-            if (string.Equals(spellId, _lastRecognizedSpellId, StringComparison.Ordinal) && triggerEndFrame - _lastRecognizedSpellEndFrame <= repeatGuardFrames)
+            if (_transcriptSegments.Count == 1)
             {
-                return false;
+                return _transcriptSegments[0].Text;
             }
 
-            _lastRecognizedSnapshot = snapshot;
-            _lastRecognizedSpellId = spellId;
-            _lastRecognizedSpellEndFrame = triggerEndFrame;
-            _lastConsumedTriggerEndFrame = triggerEndFrame;
-            return true;
+            StringBuilder builder = new StringBuilder();
+            for (int segmentIndex = 0; segmentIndex < _transcriptSegments.Count; segmentIndex++)
+            {
+                string text = _transcriptSegments[segmentIndex].Text;
+                if (builder.Length > 0)
+                {
+                    builder.Append(' ');
+                }
+
+                builder.Append(text);
+            }
+
+            return builder.ToString();
         }
 
         private void ApplyAutomaticStepSize()
@@ -523,76 +505,28 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
 
         private void SetStepSizeInFrames(int requestedStepSize)
         {
-            _stepSizeInFrames = Mathf.Clamp(requestedStepSize, 1, _maximumWindowSizeInFrames);
+            _stepSizeInFrames = Mathf.Clamp(requestedStepSize, 1, _maximumStepSizeInFrames);
             _interleavedSamples = Array.Empty<float>();
         }
 
         private int GetRecordingLengthInSeconds()
         {
-            int requiredFrames = _maximumWindowSizeInFrames + _stepSizeInFrames;
+            int requiredFrames = _maximumStepSizeInFrames * (_maximumQueuedTranscriptions + 2);
             return Mathf.Max(2, Mathf.CeilToInt(requiredFrames / 16000f));
         }
 
         private void ClearListeningState()
         {
-            _previousSamples.Clear();
-            _pendingRecognitionWindows.Clear();
+            _pendingTranscriptions.Clear();
+            _transcriptSegments.Clear();
             _lastSamplePosition = 0;
             _remainingVoiceWindows = 0;
-            _capturedFrameCount = 0;
-            _lastRecognizedSpellEndFrame = -1;
-            _lastConsumedTriggerEndFrame = -1;
-            _lastRecognizedSnapshot = string.Empty;
-            _lastRecognizedSpellId = string.Empty;
         }
 
-        private static long CalculateTriggerEndFrame(
-            in IncantationRecognitionResult result,
-            float[] processedSamples,
-            long windowEndFrame)
+        private void ClearCachedTranscriptAfterSpell()
         {
-            int triggerEndPhonemeIndex = result.Match.Best.TriggerEndPhonemeIndex;
-            int observedPhonemeCount = result.ObservedPhonemeCount;
-            if (triggerEndPhonemeIndex <= 0 || observedPhonemeCount <= 0)
-            {
-                return windowEndFrame;
-            }
-
-            long windowStartFrame = windowEndFrame - processedSamples.Length;
-            return windowStartFrame + ((long)processedSamples.Length * triggerEndPhonemeIndex / observedPhonemeCount);
-        }
-
-        private void ClearBufferedAudioAfterSpell(long triggerEndFrame)
-        {
-            RemoveRetainedSamplesBefore(triggerEndFrame);
-            RemoveQueuedWindowsBefore(triggerEndFrame);
+            _transcriptSegments.Clear();
             _remainingVoiceWindows = 0;
-        }
-
-        private void RemoveRetainedSamplesBefore(long triggerEndFrame)
-        {
-            long retainedStartFrame = _capturedFrameCount - _previousSamples.Count;
-            long removedFrameCount = triggerEndFrame - retainedStartFrame;
-            if (removedFrameCount <= 0)
-            {
-                return;
-            }
-
-            int removeCount = removedFrameCount >= _previousSamples.Count ? _previousSamples.Count : (int)removedFrameCount;
-            _previousSamples.RemoveRange(0, removeCount);
-        }
-
-        private void RemoveQueuedWindowsBefore(long triggerEndFrame)
-        {
-            int pendingWindowCount = _pendingRecognitionWindows.Count;
-            for (int windowIndex = 0; windowIndex < pendingWindowCount; windowIndex++)
-            {
-                PendingRecognitionWindow pendingWindow = _pendingRecognitionWindows.Dequeue();
-                if (pendingWindow.EndFrame > triggerEndFrame)
-                {
-                    _pendingRecognitionWindows.Enqueue(pendingWindow);
-                }
-            }
         }
     }
 }

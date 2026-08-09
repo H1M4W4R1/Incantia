@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using NUnit.Framework;
 using H1M4W4R1.Incantia.Database;
 using H1M4W4R1.Incantia.Matching;
@@ -11,23 +10,8 @@ namespace H1M4W4R1.Incantia.Tests
 {
     public sealed class IncantationRecognizerTests
     {
-        private sealed class FixedTranscriber : IIncantationSpeechTranscriber
-        {
-            private readonly IncantationTranscription _transcription;
-
-            public FixedTranscriber(IncantationTranscription transcription)
-            {
-                _transcription = transcription;
-            }
-
-            public Task<IncantationTranscription> TranscribeAsync(IncantationRecognitionRequest request)
-            {
-                return Task.FromResult(_transcription);
-            }
-        }
-
         [Test]
-        public void RecognizeAsync_MatchingTranscript_AcceptsCompiledSpellAndPreservesDiagnostics()
+        public void Recognize_MatchingTranscript_AcceptsCompiledSpellAndPreservesDiagnostics()
         {
             EnglishPhonemizer phonemizer = new EnglishPhonemizer();
             PhonemeCostModel costModel = EnglishPhonemeProfile.CreateCostModel();
@@ -41,13 +25,12 @@ namespace H1M4W4R1.Incantia.Tests
             List<CompiledIncantation> incantations = new List<CompiledIncantation> { incantation };
             IncantationMatcher matcher = new IncantationMatcher(incantations, distance, CreateConfig());
             IncantationRecognizer recognizer = new IncantationRecognizer(
-                new FixedTranscriber(new IncantationTranscription("Flame of the ancient sun. Fireball!", true)),
                 phonemizer,
                 costModel.Inventory,
                 matcher);
-            IncantationRecognitionRequest request = new IncantationRecognitionRequest(new float[16000], 16000, "en", 42);
+            IncantationRecognitionRequest request = new IncantationRecognitionRequest("Flame of the ancient sun. Fireball!", "en", 42);
 
-            IncantationRecognitionResult result = recognizer.RecognizeAsync(request).GetAwaiter().GetResult();
+            IncantationRecognitionResult result = recognizer.Recognize(request);
 
             Assert.That(result.Sequence, Is.EqualTo(42));
             Assert.That(result.NormalizedTranscript, Is.EqualTo("flame of the ancient sun fireball"));
@@ -57,20 +40,19 @@ namespace H1M4W4R1.Incantia.Tests
         }
 
         [Test]
-        public void RecognizeAsync_NoSpeech_ReturnsRejectionWithoutPhonemizing()
+        public void Recognize_EmptyTranscript_ReturnsRejectionWithoutPhonemizing()
         {
             EnglishPhonemizer phonemizer = new EnglishPhonemizer();
             PhonemeCostModel costModel = EnglishPhonemeProfile.CreateCostModel();
             WeightedPhonemeDistance distance = new WeightedPhonemeDistance(costModel);
             IncantationMatcher matcher = new IncantationMatcher(new List<CompiledIncantation>(), distance, CreateConfig());
             IncantationRecognizer recognizer = new IncantationRecognizer(
-                new FixedTranscriber(IncantationTranscription.NoSpeech),
                 phonemizer,
                 costModel.Inventory,
                 matcher);
-            IncantationRecognitionRequest request = new IncantationRecognitionRequest(new float[16000], 16000, "en", 8);
+            IncantationRecognitionRequest request = new IncantationRecognitionRequest(string.Empty, "en", 8);
 
-            IncantationRecognitionResult result = recognizer.RecognizeAsync(request).GetAwaiter().GetResult();
+            IncantationRecognitionResult result = recognizer.Recognize(request);
 
             Assert.That(result.Accepted, Is.False);
             Assert.That(result.ObservedPhonemeCount, Is.EqualTo(0));

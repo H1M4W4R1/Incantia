@@ -1360,7 +1360,7 @@ MonoBehaviour:
   SelectedLanguage: en
   TranslateToEnglish: 0
   NumOfBeams: 3
-  Verbose: 1
+  Verbose: 0
   LastTranscriptionTime: 0
 --- !u!4 &1325565930
 Transform:

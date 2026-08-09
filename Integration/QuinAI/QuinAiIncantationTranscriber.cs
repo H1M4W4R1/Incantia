@@ -2,7 +2,6 @@ using System;
 using System.Collections.Concurrent;
 using System.Text;
 using System.Threading.Tasks;
-using H1M4W4R1.Incantia.Recognition;
 using LeastSquares.Undertone;
 using UnityEngine;
 
@@ -13,18 +12,22 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
     /// Configure the assigned engine with the same language and transcription mode before sending requests.
     /// </summary>
     [DisallowMultipleComponent]
-    public sealed class QuinAiIncantationTranscriber : MonoBehaviour, IIncantationSpeechTranscriber
+    public sealed class QuinAiIncantationTranscriber : MonoBehaviour
     {
         private sealed class PendingRequest
         {
-            public PendingRequest(IncantationRecognitionRequest request, TaskCompletionSource<IncantationTranscription> completionSource)
+            public PendingRequest(float[] samples, int sampleRate, string language, TaskCompletionSource<string> completionSource)
             {
-                Request = request;
+                Samples = samples;
+                SampleRate = sampleRate;
+                Language = language;
                 CompletionSource = completionSource;
             }
 
-            public IncantationRecognitionRequest Request { get; }
-            public TaskCompletionSource<IncantationTranscription> CompletionSource { get; }
+            public float[] Samples { get; }
+            public int SampleRate { get; }
+            public string Language { get; }
+            public TaskCompletionSource<string> CompletionSource { get; }
         }
 
         [SerializeField] private SpeechEngine _engine;
@@ -46,18 +49,32 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
         }
 
         /// <summary>
-        /// Enqueues a request from any thread. The component calls Quin.AI's queue on its next Unity main-thread update.
-        /// Cancellation deliberately discards results at the recognizer layer because Quin.AI inference cannot be interrupted safely.
+        /// Enqueues audio for transcription from any thread. The component calls Quin.AI's queue on its next Unity main-thread update.
         /// </summary>
-        public Task<IncantationTranscription> TranscribeAsync(IncantationRecognitionRequest request)
+        public Task<string> TranscribeAsync(float[] samples, int sampleRate, string language)
         {
             if (_isDisposed)
             {
                 throw new ObjectDisposedException(nameof(QuinAiIncantationTranscriber));
             }
 
-            TaskCompletionSource<IncantationTranscription> completionSource = new TaskCompletionSource<IncantationTranscription>();
-            _pendingRequests.Enqueue(new PendingRequest(request, completionSource));
+            if (ReferenceEquals(samples, null))
+            {
+                throw new ArgumentNullException(nameof(samples));
+            }
+
+            if (sampleRate <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(sampleRate));
+            }
+
+            if (string.IsNullOrWhiteSpace(language))
+            {
+                throw new ArgumentException("A language identifier is required.", nameof(language));
+            }
+
+            TaskCompletionSource<string> completionSource = new TaskCompletionSource<string>();
+            _pendingRequests.Enqueue(new PendingRequest(samples, sampleRate, language, completionSource));
             return completionSource.Task;
         }
 
@@ -73,8 +90,8 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
         {
             try
             {
-                ValidateEngine(pendingRequest.Request);
-                SpeechSegment[] segments = await _engine.TranscribeSamples(pendingRequest.Request.Samples).ConfigureAwait(false);
+                ValidateEngine(pendingRequest);
+                SpeechSegment[] segments = await _engine.TranscribeSamples(pendingRequest.Samples).ConfigureAwait(false);
                 pendingRequest.CompletionSource.TrySetResult(CreateTranscription(segments));
             }
             catch (Exception exception)
@@ -92,7 +109,7 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
             }
         }
 
-        private void ValidateEngine(in IncantationRecognitionRequest request)
+        private void ValidateEngine(PendingRequest request)
         {
             if (ReferenceEquals(_engine, null) || !_engine)
             {
@@ -120,11 +137,11 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
             }
         }
 
-        private static IncantationTranscription CreateTranscription(SpeechSegment[] segments)
+        private static string CreateTranscription(SpeechSegment[] segments)
         {
             if (ReferenceEquals(segments, null) || segments.Length == 0)
             {
-                return IncantationTranscription.NoSpeech;
+                return string.Empty;
             }
 
             StringBuilder builder = new StringBuilder();
@@ -145,7 +162,7 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
             }
 
             string transcript = builder.ToString();
-            return new IncantationTranscription(transcript, transcript.Length > 0);
+            return transcript;
         }
     }
 }

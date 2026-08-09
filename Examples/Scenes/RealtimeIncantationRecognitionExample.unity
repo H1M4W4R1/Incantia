@@ -1083,10 +1083,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::H1M4W4R1.Incantia.Examples.RealtimeIncantationRecognitionExampleController
   _transcriber: {fileID: 931387957}
   _initialStepSizeInSeconds: 1.5
+  _maximumStepSizeInSeconds: 12
   _autoAdjustStepSize: 1
-  _maximumWindowLengthInSeconds: 12
   _voiceActivityThreshold: 0.004
   _voiceActivityWindowCount: 3
+  _maximumQueuedTranscriptions: 8
   _canvas: {fileID: 242326996}
   _listenButton: {fileID: 514592426}
   _listenButtonText: {fileID: 1447956060}
@@ -2152,7 +2153,7 @@ MonoBehaviour:
   SelectedLanguage: en
   TranslateToEnglish: 0
   NumOfBeams: 3
-  Verbose: 1
+  Verbose: 0
   LastTranscriptionTime: 0
 --- !u!4 &1953780807
 Transform:

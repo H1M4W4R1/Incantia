@@ -18,9 +18,9 @@ The package does not provide a Whisper implementation. Speech transcription rema
 
 ## Quin.AI Whisper integration
 
-`QuinAiIncantationTranscriber` adapts the existing Quin.AI `SpeechEngine` to `IIncantationSpeechTranscriber`. Add it to a GameObject, assign an already configured `SpeechEngine`, then construct `IncantationRecognizer` with that bridge, the matching `IPhonemizer`, its `PhonemeInventory`, and `IncantationMatcher`.
+`QuinAiIncantationTranscriber` adapts the existing Quin.AI `SpeechEngine` to a text transcription provider. Add it to a GameObject, assign an already configured `SpeechEngine`, then pass its transcript to `IncantationRecognizer.Recognize(...)` with the matching `IPhonemizer`, its `PhonemeInventory`, and `IncantationMatcher`.
 
-The adapter queues calls from any thread and invokes Quin.AI's request queue on Unity's main thread. Quin.AI performs native Whisper inference in its own serialized worker task; Incantia uses `ConfigureAwait(false)` so normalization, phonemization, and matching resume outside the Unity synchronization context. Set the engine to the requested language, leave `TranslateToEnglish` disabled, and supply mono 16 kHz PCM samples. Wait for `QuinAiIncantationTranscriber.IsReady` before submitting a request.
+The adapter queues audio calls from any thread and invokes Quin.AI's request queue on Unity's main thread. Quin.AI performs native Whisper inference in its own serialized worker task, then returns a transcript. Incantia does not receive audio samples or depend on Whisper; it synchronously normalizes, phonemizes, matches, and accepts that text. Set the engine to the requested language, leave `TranslateToEnglish` disabled, and supply mono 16 kHz PCM samples only to the transcriber. Wait for `QuinAiIncantationTranscriber.IsReady` before submitting a request.
 
 ## Playable example scene
 
@@ -36,7 +36,7 @@ Call `BeginRecording()` and `EndRecordingAndRecognize()` from your Unity UI. The
 
 ## Realtime spells
 
-Derive from `EnglishRealtimeIncantationRecognitionBehaviour` for continuous spells. Call `BeginListening()` and `StopListening()` from Unity UI. It captures overlapping 16 kHz microphone windows, uses voice-activity gating, queues active windows in capture order while Whisper is busy, and sends callbacks on Unity's main thread. Real-time matching accepts a spell whose trigger appears before later speech in the same window. After a cast, the behavior estimates that trigger's audio position, removes only earlier retained audio, and preserves later speech for the next spell. A consumed-trigger watermark rejects any later full or quick-spell result that resolves to already-cast audio; a three-second same-spell guard suppresses new overlapping-window duplicates. Override `OnRecognitionUpdated(...)` for live transcript/phoneme UI and `OnSpellRecognized(...)` for gameplay; rejected or ambiguous snapshots never call `OnSpellRecognized(...)`.
+Derive from `EnglishRealtimeIncantationRecognitionBehaviour` for continuous spells. Call `BeginListening()` and `StopListening()` from Unity UI. It captures non-overlapping 16 kHz microphone blocks, uses voice-activity gating, and queues each active block once while Whisper is busy. After Whisper returns, only the text is retained in a transcript cache; Incantia matches against that cache and sends callbacks on Unity's main thread. A successful cast clears the consumed transcript cache before the next queued block is processed, so already-transcribed speech is never sent through Whisper again. Override `OnRecognitionUpdated(...)` for live transcript/phoneme UI and `OnSpellRecognized(...)` for gameplay; rejected or ambiguous snapshots never call `OnSpellRecognized(...)`.
 
 Override `CreateMatcherConfig()` and enable `AllowTriggerOnlyRecognition` only for deliberately distinct quick-spell trigger words. The default high quick-spell threshold is `0.92`; tune it with real transcript samples before release.
 

@@ -197,7 +197,7 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
             }
 
             IncantationMatcher matcher = new IncantationMatcher(compiledIncantations, distance, CreateMatcherConfig());
-            _recognizer = new IncantationRecognizer(_transcriber, _phonemizer, costModel.Inventory, matcher);
+            _recognizer = new IncantationRecognizer(_phonemizer, costModel.Inventory, matcher);
         }
 
         private async void RecognizeSamplesAsync(float[] samples)
@@ -206,8 +206,9 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
             OnRecognitionStarted();
             try
             {
-                IncantationRecognitionRequest request = new IncantationRecognitionRequest(samples, 16000, "en", _nextSequence++);
-                IncantationRecognitionResult result = await _recognizer.RecognizeAsync(request);
+                string transcript = await _transcriber.TranscribeAsync(samples, 16000, "en");
+                IncantationRecognitionRequest request = new IncantationRecognitionRequest(transcript, "en", _nextSequence++);
+                IncantationRecognitionResult result = _recognizer.Recognize(request);
                 OnRecognitionCompleted(result);
             }
             catch (Exception exception)
