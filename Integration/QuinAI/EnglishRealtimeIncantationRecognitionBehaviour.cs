@@ -56,6 +56,7 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
         private long _listeningSession;
         private long _capturedFrameCount;
         private long _lastRecognizedSpellEndFrame = -1;
+        private long _lastConsumedTriggerEndFrame = -1;
         private string _lastRecognizedSnapshot = string.Empty;
         private string _lastRecognizedSpellId = string.Empty;
         private float _recognitionStartedAt;
@@ -445,9 +446,10 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
                 if (_isListening && listeningSession == _listeningSession)
                 {
                     OnRecognitionUpdated(result);
-                    if (result.Accepted && IsNewRecognizedSnapshot(result, endFrame))
+                    long triggerEndFrame = CalculateTriggerEndFrame(result, samples, endFrame);
+                    if (result.Accepted && IsNewRecognizedSnapshot(result, triggerEndFrame))
                     {
-                        ClearBufferedAudioAfterSpell(result, samples, endFrame);
+                        ClearBufferedAudioAfterSpell(triggerEndFrame);
                         OnSpellRecognized(result);
                     }
                 }
@@ -474,7 +476,7 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
             }
         }
 
-        private bool IsNewRecognizedSnapshot(in IncantationRecognitionResult result, long endFrame)
+        private bool IsNewRecognizedSnapshot(in IncantationRecognitionResult result, long triggerEndFrame)
         {
             string spellId = result.Match.Best.Incantation.SpellId;
             string snapshot = $"{spellId}|{result.NormalizedTranscript}";
@@ -484,14 +486,20 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
             }
 
             long repeatGuardFrames = (long)(_sameSpellRepeatGuardSeconds * 16000f);
-            if (string.Equals(spellId, _lastRecognizedSpellId, StringComparison.Ordinal) && endFrame - _lastRecognizedSpellEndFrame <= repeatGuardFrames)
+            if (triggerEndFrame <= _lastConsumedTriggerEndFrame)
+            {
+                return false;
+            }
+
+            if (string.Equals(spellId, _lastRecognizedSpellId, StringComparison.Ordinal) && triggerEndFrame - _lastRecognizedSpellEndFrame <= repeatGuardFrames)
             {
                 return false;
             }
 
             _lastRecognizedSnapshot = snapshot;
             _lastRecognizedSpellId = spellId;
-            _lastRecognizedSpellEndFrame = endFrame;
+            _lastRecognizedSpellEndFrame = triggerEndFrame;
+            _lastConsumedTriggerEndFrame = triggerEndFrame;
             return true;
         }
 
@@ -533,11 +541,12 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
             _remainingVoiceWindows = 0;
             _capturedFrameCount = 0;
             _lastRecognizedSpellEndFrame = -1;
+            _lastConsumedTriggerEndFrame = -1;
             _lastRecognizedSnapshot = string.Empty;
             _lastRecognizedSpellId = string.Empty;
         }
 
-        private void ClearBufferedAudioAfterSpell(
+        private static long CalculateTriggerEndFrame(
             in IncantationRecognitionResult result,
             float[] processedSamples,
             long windowEndFrame)
@@ -546,11 +555,15 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
             int observedPhonemeCount = result.ObservedPhonemeCount;
             if (triggerEndPhonemeIndex <= 0 || observedPhonemeCount <= 0)
             {
-                return;
+                return windowEndFrame;
             }
 
             long windowStartFrame = windowEndFrame - processedSamples.Length;
-            long triggerEndFrame = windowStartFrame + ((long)processedSamples.Length * triggerEndPhonemeIndex / observedPhonemeCount);
+            return windowStartFrame + ((long)processedSamples.Length * triggerEndPhonemeIndex / observedPhonemeCount);
+        }
+
+        private void ClearBufferedAudioAfterSpell(long triggerEndFrame)
+        {
             RemoveRetainedSamplesBefore(triggerEndFrame);
             RemoveQueuedWindowsBefore(triggerEndFrame);
             _remainingVoiceWindows = 0;
