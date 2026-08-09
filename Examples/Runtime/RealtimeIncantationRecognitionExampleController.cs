@@ -103,7 +103,7 @@ namespace H1M4W4R1.Incantia.Examples
         protected override IncantationMatcherConfig CreateMatcherConfig()
         {
             IncantationMatcherConfig config = base.CreateMatcherConfig();
-            config.AllowTriggerOnlyRecognition = true;
+            config.AllowTriggerOnlyRecognition = false;
             return config;
         }
 
