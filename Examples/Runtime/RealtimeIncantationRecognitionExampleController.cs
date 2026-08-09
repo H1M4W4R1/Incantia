@@ -134,7 +134,7 @@ namespace H1M4W4R1.Incantia.Examples
 
         protected override void OnRecognitionStarted()
         {
-            SetStatus("Whisper is analyzing the latest active window...", new Color(0.48f, 0.82f, 1f));
+            SetStatus("Whisper is analyzing the cached phrase audio...", new Color(0.48f, 0.82f, 1f));
         }
 
         protected override void OnRecognitionUpdated(in IncantationRecognitionResult result)

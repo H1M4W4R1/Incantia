@@ -1082,10 +1082,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::H1M4W4R1.Incantia.Examples.RealtimeIncantationRecognitionExampleController
   _transcriber: {fileID: 931387957}
-  _initialStepSizeInSeconds: 1
-  _maximumStepSizeInSeconds: 12
-  _autoAdjustStepSize: 1
-  _whisperBeamCount: 1
+  _captureStepSizeInSeconds: 0.25
+  _minimumNewAudioDurationForRecognition: 0.75
+  _finalWhisperBeamCount: 1
   _voiceActivityThreshold: 0.004
   _voiceActivityWindowCount: 3
   _maximumCachedAudioDurationInSeconds: 30
