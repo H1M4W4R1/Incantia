@@ -130,6 +130,7 @@ namespace H1M4W4R1.Incantia.Examples
         {
             DisplayResult(result);
             _recordButton.interactable = IsReady;
+            Debug.Log($"Spell cast: {result.Match.Best.Incantation.SpellId} ({result.Match.MatchKind}).");
         }
 
         protected override void OnRecognitionFailed(Exception exception)

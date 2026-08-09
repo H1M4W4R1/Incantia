@@ -146,6 +146,7 @@ namespace H1M4W4R1.Incantia.Examples
         {
             CandidateScore best = result.Match.Best;
             SetStatus($"Spell cast: {best.Incantation.SpellId} ({result.Match.MatchKind}).", new Color(0.48f, 1f, 0.62f));
+            Debug.Log($"Spell cast: {best.Incantation.SpellId} ({result.Match.MatchKind}).");
         }
 
         protected override void OnRecognitionFailed(Exception exception)

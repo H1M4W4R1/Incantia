@@ -407,6 +407,7 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
                     OnRecognitionUpdated(result);
                     if (result.Accepted && IsNewRecognizedSnapshot(result))
                     {
+                        ClearBufferedAudioAfterSpell();
                         OnSpellRecognized(result);
                     }
                 }
@@ -484,6 +485,23 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
             _lastSamplePosition = 0;
             _remainingVoiceWindows = 0;
             _lastRecognizedSnapshot = string.Empty;
+        }
+
+        private void ClearBufferedAudioAfterSpell()
+        {
+            _previousSamples.Clear();
+            _pendingSamples = null;
+            _remainingVoiceWindows = 0;
+            if (ReferenceEquals(_recordingClip, null) || !_recordingClip)
+            {
+                return;
+            }
+
+            int currentPosition = Microphone.GetPosition(null);
+            if (currentPosition >= 0)
+            {
+                _lastSamplePosition = currentPosition;
+            }
         }
     }
 }

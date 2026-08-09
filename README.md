@@ -36,7 +36,7 @@ Call `BeginRecording()` and `EndRecordingAndRecognize()` from your Unity UI. The
 
 ## Realtime spells
 
-Derive from `EnglishRealtimeIncantationRecognitionBehaviour` for continuous spells. Call `BeginListening()` and `StopListening()` from Unity UI. It captures overlapping 16 kHz microphone windows, uses voice-activity gating, keeps the latest window while Whisper is busy, and sends callbacks on Unity's main thread. Override `OnRecognitionUpdated(...)` for live transcript/phoneme UI and `OnSpellRecognized(...)` for gameplay; rejected or ambiguous snapshots never call `OnSpellRecognized(...)`.
+Derive from `EnglishRealtimeIncantationRecognitionBehaviour` for continuous spells. Call `BeginListening()` and `StopListening()` from Unity UI. It captures overlapping 16 kHz microphone windows, uses voice-activity gating, keeps the latest window while Whisper is busy, and sends callbacks on Unity's main thread. After an accepted cast it clears retained audio, pending windows, and unprocessed microphone frames so that cast cannot trigger again. Override `OnRecognitionUpdated(...)` for live transcript/phoneme UI and `OnSpellRecognized(...)` for gameplay; rejected or ambiguous snapshots never call `OnSpellRecognized(...)`.
 
 Override `CreateMatcherConfig()` and enable `AllowTriggerOnlyRecognition` only for deliberately distinct quick-spell trigger words. The default high quick-spell threshold is `0.92`; tune it with real transcript samples before release.
 
