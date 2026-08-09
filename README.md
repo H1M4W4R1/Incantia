@@ -19,3 +19,9 @@ The package does not provide a Whisper implementation. Speech transcription rema
 `QuinAiIncantationTranscriber` adapts the existing Quin.AI `SpeechEngine` to `IIncantationSpeechTranscriber`. Add it to a GameObject, assign an already configured `SpeechEngine`, then construct `IncantationRecognizer` with that bridge, the matching `IPhonemizer`, its `PhonemeInventory`, and `IncantationMatcher`.
 
 The adapter queues calls from any thread and invokes Quin.AI's request queue on Unity's main thread. Quin.AI performs native Whisper inference in its own serialized worker task; Incantia uses `ConfigureAwait(false)` so normalization, phonemization, and matching resume outside the Unity synchronization context. Set the engine to the requested language, leave `TranslateToEnglish` disabled, and supply mono 16 kHz PCM samples. Wait for `QuinAiIncantationTranscriber.IsReady` before submitting a request.
+
+## Playable example scene
+
+Create `Assets/H1M4W4R1/Incantia/Examples/Scenes/IncantationRecognitionExample.unity` from **Incantia → Create Recognition Example Scene**. It uses only Unity UI/TextMeshPro—not IMGUI—and displays the Whisper transcript, normalized text, observed phonemes, best spell, component scores, margin, and rejection reason.
+
+The scene includes Meteor, Blink, Arcane Barrier, Dark Sphere, Holy Ray, Heal, Stone Wall, Wind Blade, Lightning Bolt, Ice Lance, and Fireball. Press **RECORD**, speak one full incantation, then press **STOP**. The supplied `whisper-tiny.en` model loads locally; it may take several seconds before the record button becomes available.

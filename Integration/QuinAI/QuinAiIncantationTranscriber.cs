@@ -34,6 +34,17 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
         /// <summary>True when the assigned engine has loaded its configured Whisper model.</summary>
         public bool IsReady => _engine && _engine.Loaded;
 
+        /// <summary>Assigns the Quin.AI engine during scene setup, before requests are queued.</summary>
+        public void SetEngine(SpeechEngine engine)
+        {
+            if (ReferenceEquals(engine, null))
+            {
+                throw new ArgumentNullException(nameof(engine));
+            }
+
+            _engine = engine;
+        }
+
         /// <summary>
         /// Enqueues a request from any thread. The component calls Quin.AI's queue on its next Unity main-thread update.
         /// Cancellation deliberately discards results at the recognizer layer because Quin.AI inference cannot be interrupted safely.

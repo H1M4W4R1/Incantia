@@ -52,6 +52,32 @@ namespace H1M4W4R1.Incantia.Phonetics.English
             _pronunciations[normalizedText] = pronunciation;
         }
 
+        /// <summary>
+        /// Explicitly stores the deterministic fallback pronunciation for a reference word or phrase.
+        /// Use this as an authoring baseline, then replace fantasy names with a reviewed <see cref="RegisterPronunciation(string,EnglishPhoneme[])"/> override.
+        /// </summary>
+        public void RegisterFallbackPronunciation(string text)
+        {
+            string normalizedText = IncantationTextNormalizer.Normalize(text);
+            if (normalizedText.Length == 0)
+            {
+                throw new ArgumentException("Pronunciation text must contain at least one word.", nameof(text));
+            }
+
+            if (_pronunciations.ContainsKey(normalizedText))
+            {
+                return;
+            }
+
+            PhonemeSequence pronunciation = Phonemize(normalizedText, false);
+            if (pronunciation.IsEmpty)
+            {
+                throw new InvalidOperationException("Fallback pronunciation produced no phonemes.");
+            }
+
+            _pronunciations.Add(normalizedText, pronunciation);
+        }
+
         /// <summary>Phonemizes an ASR transcript. Unrecognized words use deterministic spelling-to-sound fallback rules.</summary>
         public PhonemeSequence Phonemize(string text)
         {

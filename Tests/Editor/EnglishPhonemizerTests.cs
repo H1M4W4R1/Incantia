@@ -63,6 +63,18 @@ namespace H1M4W4R1.Incantia.Tests
         }
 
         [Test]
+        public void RegisterFallbackPronunciation_ExplicitlyEnablesStrictReferenceCompilation()
+        {
+            EnglishPhonemizer phonemizer = new EnglishPhonemizer();
+            PhonemeSequence observedFallback = phonemizer.Phonemize("eldoria");
+
+            phonemizer.RegisterFallbackPronunciation("eldoria");
+
+            PhonemeSequence registeredReference = phonemizer.PhonemizeReference("eldoria");
+            Assert.That(registeredReference.AsSpan().ToArray(), Is.EqualTo(observedFallback.AsSpan().ToArray()));
+        }
+
+        [Test]
         public void CreateCostModel_EnglishConfusionOverrides_AreCheaperThanUnrelatedSubstitutions()
         {
             PhonemeCostModel costModel = EnglishPhonemeProfile.CreateCostModel();
