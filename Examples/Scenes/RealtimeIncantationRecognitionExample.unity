@@ -1085,11 +1085,10 @@ MonoBehaviour:
   _initialStepSizeInSeconds: 1
   _maximumStepSizeInSeconds: 12
   _autoAdjustStepSize: 1
-  _whisperBeamCount: 3
+  _whisperBeamCount: 1
   _voiceActivityThreshold: 0.004
   _voiceActivityWindowCount: 3
-  _maximumQueuedTranscriptions: 8
-  _maximumCachedTranscriptCharacters: 512
+  _maximumCachedAudioDurationInSeconds: 30
   _canvas: {fileID: 242326996}
   _listenButton: {fileID: 514592426}
   _listenButtonText: {fileID: 1447956060}

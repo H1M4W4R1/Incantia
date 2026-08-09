@@ -43,12 +43,52 @@ namespace H1M4W4R1.Incantia.Recognition
             return string.Empty;
         }
 
-        private static int GetConsumedPhonemeCount(in IncantationRecognitionResult acceptedResult)
+        /// <summary>
+        /// Returns the exclusive observed-phoneme endpoint consumed by an accepted result. This includes any leading
+        /// speech before the accepted incantation so stale input is not reconsidered.
+        /// </summary>
+        public static int GetConsumedPhonemeCount(in IncantationRecognitionResult acceptedResult)
         {
+            if (!acceptedResult.Accepted)
+            {
+                return 0;
+            }
+
             CandidateScore best = acceptedResult.Match.Best;
             return acceptedResult.Match.MatchKind == IncantationMatchKind.FullIncantation
                 ? best.FullIncantationEndPhonemeIndex
                 : best.TriggerEndPhonemeIndex;
+        }
+
+        /// <summary>
+        /// Maps an accepted phoneme endpoint to the corresponding exclusive sample offset in the transcribed audio.
+        /// Whisper supplies no word timestamps in the Quin.AI backend, so the endpoint is proportional to observed
+        /// phoneme progress and is clamped to the submitted sample range.
+        /// </summary>
+        public static int GetConsumedSampleCount(
+            int submittedSampleCount,
+            in IncantationRecognitionResult acceptedResult)
+        {
+            if (submittedSampleCount <= 0 || !acceptedResult.Accepted)
+            {
+                return 0;
+            }
+
+            int observedPhonemeCount = acceptedResult.ObservedPhonemeCount;
+            int consumedPhonemeCount = GetConsumedPhonemeCount(acceptedResult);
+            if (observedPhonemeCount <= 0 || consumedPhonemeCount >= observedPhonemeCount)
+            {
+                return submittedSampleCount;
+            }
+
+            if (consumedPhonemeCount <= 0)
+            {
+                return 0;
+            }
+
+            double consumedRatio = (double)consumedPhonemeCount / observedPhonemeCount;
+            int consumedSampleCount = (int)Math.Ceiling(submittedSampleCount * consumedRatio);
+            return Math.Min(submittedSampleCount, consumedSampleCount);
         }
 
         private static bool TryGetNextWord(string text, int startIndex, out int wordEndExclusive)
