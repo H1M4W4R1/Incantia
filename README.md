@@ -2,6 +2,8 @@
 
 Incantia provides Unity-independent, closed-set phonetic matching for spell incantations. It accepts a phoneme stream produced by a language-specific `IPhonemizer`, compares each spell against the terminal portion of the transcript, and only accepts a winner when score, score margin, trigger, and length safeguards pass. Unrelated speech before a complete, terminal incantation does not lower its full or consonant score.
 
+For mastered quick spells, set `IncantationMatcherConfig.AllowTriggerOnlyRecognition` to `true`. This is a secondary path used only when full-incantation acceptance fails; it requires a complete terminal trigger, `MinimumTriggerOnlyScore` (default `0.92`), and `MinimumTriggerOnlyMargin` (default `0.12`). Give every quick spell a distinctive trigger.
+
 ## Runtime flow
 
 1. Normalize the Whisper transcript with `IncantationTextNormalizer.Normalize`.
@@ -31,3 +33,9 @@ The scene includes Meteor, Blink, Arcane Barrier, Dark Sphere, Holy Ray, Heal, S
 Derive a component from `EnglishIncantationRecognitionBehaviour`, assign a `QuinAiIncantationTranscriber`, and override `AddIncantationDefinitions(...)`. Use `ConfigurePhonemizer(...)` for reviewed fantasy-word pronunciations. Connect UI and gameplay by overriding `OnWhisperReady`, `OnRecordingStarted`, `OnRecognitionStarted`, `OnRecognitionCompleted`, and failure callbacks; no public C# events or UnityEvents are required.
 
 Call `BeginRecording()` and `EndRecordingAndRecognize()` from your Unity UI. The base behavior handles 16 kHz microphone capture, stereo-to-mono conversion, reference compilation, Whisper submission, and matching. [IncantationRecognitionExampleController.cs](Examples/Runtime/IncantationRecognitionExampleController.cs) is the working reference implementation.
+
+## Realtime spells
+
+Derive from `EnglishRealtimeIncantationRecognitionBehaviour` for continuous spells. Call `BeginListening()` and `StopListening()` from Unity UI. It captures overlapping 16 kHz microphone windows, uses voice-activity gating, keeps the latest window while Whisper is busy, and sends callbacks on Unity's main thread. Override `OnRecognitionUpdated(...)` for live transcript/phoneme UI and `OnSpellRecognized(...)` for gameplay; rejected or ambiguous snapshots never call `OnSpellRecognized(...)`.
+
+Override `CreateMatcherConfig()` and enable `AllowTriggerOnlyRecognition` only for deliberately distinct quick-spell trigger words. The default high quick-spell threshold is `0.92`; tune it with real transcript samples before release.

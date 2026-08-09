@@ -162,7 +162,7 @@ namespace H1M4W4R1.Incantia.Examples
             if (result.Accepted)
             {
                 CandidateScore best = result.Match.Best;
-                _recognitionText.text = $"RECOGNIZED SPELL\n{best.Incantation.SpellId}\nScore {best.Total:F3}  ·  Margin {result.Match.Margin:F3}\nFull {best.FullPhoneme:F3}  ·  Consonants {best.ConsonantSkeleton:F3}  ·  Trigger {best.Trigger:F3}";
+                _recognitionText.text = $"RECOGNIZED SPELL\n{best.Incantation.SpellId} · {result.Match.MatchKind}\nScore {best.Total:F3}  ·  Margin {result.Match.Margin:F3}\nFull {best.FullPhoneme:F3}  ·  Consonants {best.ConsonantSkeleton:F3}  ·  Trigger {best.Trigger:F3}";
                 SetStatus("Spell accepted.", new Color(0.48f, 1f, 0.62f));
                 return;
             }

@@ -36,6 +36,8 @@ namespace H1M4W4R1.Incantia.Matching
             Config.Validate();
             CandidateScore best = default;
             CandidateScore second = default;
+            CandidateScore triggerBest = default;
+            CandidateScore triggerSecond = default;
             for (int incantationIndex = 0; incantationIndex < _incantations.Count; incantationIndex++)
             {
                 CompiledIncantation incantation = _incantations[incantationIndex];
@@ -54,11 +56,38 @@ namespace H1M4W4R1.Incantia.Matching
                 {
                     second = candidate;
                 }
+
+                if (!incantation.HasTrigger)
+                {
+                    continue;
+                }
+
+                if (!triggerBest.HasCandidate || candidate.Trigger > triggerBest.Trigger)
+                {
+                    triggerSecond = triggerBest;
+                    triggerBest = candidate;
+                }
+                else if (!triggerSecond.HasCandidate || candidate.Trigger > triggerSecond.Trigger)
+                {
+                    triggerSecond = candidate;
+                }
             }
 
             float margin = best.HasCandidate ? best.Total - (second.HasCandidate ? second.Total : 0f) : 0f;
-            bool accepted = IsAccepted(best, margin, observation.Phonemes.Length);
-            return new IncantationMatchResult(best, second, margin, accepted);
+            if (IsFullIncantationAccepted(best, margin, observation.Phonemes.Length))
+            {
+                return new IncantationMatchResult(best, second, margin, true, IncantationMatchKind.FullIncantation);
+            }
+
+            float triggerMargin = triggerBest.HasCandidate ? triggerBest.Trigger - (triggerSecond.HasCandidate ? triggerSecond.Trigger : 0f) : 0f;
+            if (IsTriggerOnlyAccepted(triggerBest, triggerMargin, observation.Phonemes.Length))
+            {
+                CandidateScore triggerOnlyBest = CreateTriggerOnlyCandidate(triggerBest);
+                CandidateScore triggerOnlySecond = triggerSecond.HasCandidate ? CreateTriggerOnlyCandidate(triggerSecond) : default;
+                return new IncantationMatchResult(triggerOnlyBest, triggerOnlySecond, triggerMargin, true, IncantationMatchKind.TriggerOnly);
+            }
+
+            return new IncantationMatchResult(best, second, margin, false, IncantationMatchKind.None);
         }
 
         private CandidateScore Evaluate(CompiledIncantation incantation, in PhoneticObservation observation)
@@ -123,7 +152,7 @@ namespace H1M4W4R1.Incantia.Matching
             return activeWeight <= 0f ? 0f : weightedScore / activeWeight;
         }
 
-        private bool IsAccepted(in CandidateScore best, float margin, int observedPhonemeCount)
+        private bool IsFullIncantationAccepted(in CandidateScore best, float margin, int observedPhonemeCount)
         {
             if (!best.HasCandidate || observedPhonemeCount < Config.MinimumObservedPhonemeCount)
             {
@@ -141,6 +170,32 @@ namespace H1M4W4R1.Incantia.Matching
             }
 
             return !best.Incantation.HasTrigger || best.Trigger >= Config.MinimumTriggerScore;
+        }
+
+        private bool IsTriggerOnlyAccepted(in CandidateScore best, float margin, int observedPhonemeCount)
+        {
+            if (!Config.AllowTriggerOnlyRecognition || !best.HasCandidate || !best.Incantation.HasTrigger)
+            {
+                return false;
+            }
+
+            if (observedPhonemeCount < best.Incantation.TriggerPhonemes.Length)
+            {
+                return false;
+            }
+
+            return best.Trigger >= Config.MinimumTriggerOnlyScore && margin >= Config.MinimumTriggerOnlyMargin;
+        }
+
+        private static CandidateScore CreateTriggerOnlyCandidate(in CandidateScore candidate)
+        {
+            return new CandidateScore(
+                candidate.Incantation,
+                candidate.Trigger,
+                candidate.FullPhoneme,
+                candidate.ConsonantSkeleton,
+                candidate.Trigger,
+                candidate.ObservedLengthRatio);
         }
     }
 }

@@ -25,6 +25,7 @@ namespace H1M4W4R1.Incantia.Tests
             Assert.That(result.Best.Trigger, Is.EqualTo(1f));
             Assert.That(result.Best.Total, Is.GreaterThan(result.Second.Total));
             Assert.That(result.Accepted, Is.True);
+            Assert.That(result.MatchKind, Is.EqualTo(IncantationMatchKind.FullIncantation));
         }
 
         [Test]
@@ -62,6 +63,43 @@ namespace H1M4W4R1.Incantia.Tests
             Assert.That(result.Best.ConsonantSkeleton, Is.EqualTo(1f));
             Assert.That(result.Best.Trigger, Is.EqualTo(1f));
             Assert.That(result.Accepted, Is.True);
+        }
+
+        [Test]
+        public void Match_TriggerOnlyObservation_UsesOptInQuickSpellRecognition()
+        {
+            WeightedPhonemeDistance distance = CreateDistance();
+            CompiledIncantation arcaneBarrier = CreateIncantation(distance, "ArcaneBarrier", new ushort[] { 3, 1, 2, 4, 3, 1 }, new ushort[] { 3, 1 });
+            CompiledIncantation meteor = CreateIncantation(distance, "Meteor", new ushort[] { 4, 2, 1, 3, 4, 2 }, new ushort[] { 4, 2 });
+            List<CompiledIncantation> incantations = new List<CompiledIncantation> { arcaneBarrier, meteor };
+            IncantationMatcherConfig config = CreateConfig();
+            config.AllowTriggerOnlyRecognition = true;
+            IncantationMatcher matcher = new IncantationMatcher(incantations, distance, config);
+            PhonemeSequence observed = CreateSequence(new ushort[] { 3, 1 });
+            PhoneticObservation observation = PhoneticObservation.Create(observed, distance.CostModel.Inventory);
+
+            IncantationMatchResult result = matcher.Match("en", observation);
+
+            Assert.That(result.Best.Incantation.SpellId, Is.EqualTo("ArcaneBarrier"));
+            Assert.That(result.Best.Total, Is.EqualTo(1f));
+            Assert.That(result.MatchKind, Is.EqualTo(IncantationMatchKind.TriggerOnly));
+            Assert.That(result.Accepted, Is.True);
+        }
+
+        [Test]
+        public void Match_TriggerOnlyObservation_IsDisabledByDefault()
+        {
+            WeightedPhonemeDistance distance = CreateDistance();
+            CompiledIncantation arcaneBarrier = CreateIncantation(distance, "ArcaneBarrier", new ushort[] { 3, 1, 2, 4, 3, 1 }, new ushort[] { 3, 1 });
+            List<CompiledIncantation> incantations = new List<CompiledIncantation> { arcaneBarrier };
+            IncantationMatcher matcher = new IncantationMatcher(incantations, distance, CreateConfig());
+            PhonemeSequence observed = CreateSequence(new ushort[] { 3, 1 });
+            PhoneticObservation observation = PhoneticObservation.Create(observed, distance.CostModel.Inventory);
+
+            IncantationMatchResult result = matcher.Match("en", observation);
+
+            Assert.That(result.Accepted, Is.False);
+            Assert.That(result.MatchKind, Is.EqualTo(IncantationMatchKind.None));
         }
 
         private static IncantationMatcherConfig CreateConfig()

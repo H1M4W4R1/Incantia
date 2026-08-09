@@ -12,6 +12,10 @@ namespace H1M4W4R1.Incantia.Matching
         public float MinimumScore { get; set; } = 0.70f;
         public float MinimumMargin { get; set; } = 0.08f;
         public float MinimumTriggerScore { get; set; } = 0.60f;
+        /// <summary>Enables high-confidence trigger-word recognition when a full incantation is not accepted.</summary>
+        public bool AllowTriggerOnlyRecognition { get; set; }
+        public float MinimumTriggerOnlyScore { get; set; } = 0.92f;
+        public float MinimumTriggerOnlyMargin { get; set; } = 0.12f;
         public float MinimumObservedLengthRatio { get; set; } = 0.50f;
         public int MinimumObservedPhonemeCount { get; set; } = 3;
 
@@ -23,6 +27,8 @@ namespace H1M4W4R1.Incantia.Matching
             ValidateUnitInterval(MinimumScore, nameof(MinimumScore));
             ValidateUnitInterval(MinimumMargin, nameof(MinimumMargin));
             ValidateUnitInterval(MinimumTriggerScore, nameof(MinimumTriggerScore));
+            ValidateUnitInterval(MinimumTriggerOnlyScore, nameof(MinimumTriggerOnlyScore));
+            ValidateUnitInterval(MinimumTriggerOnlyMargin, nameof(MinimumTriggerOnlyMargin));
             ValidateNonNegative(MinimumObservedLengthRatio, nameof(MinimumObservedLengthRatio));
             if (MinimumObservedPhonemeCount < 1)
             {
