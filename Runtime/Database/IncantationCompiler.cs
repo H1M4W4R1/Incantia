@@ -34,6 +34,10 @@ namespace H1M4W4R1.Incantia.Database
             PhonemeSequence triggerPhonemes = string.IsNullOrWhiteSpace(definition.TriggerText)
                 ? new PhonemeSequence(Array.Empty<PhonemeId>())
                 : PhonemizeRequired(definition.TriggerText, "trigger text");
+            if (!triggerPhonemes.IsEmpty && !EndsWith(phonemes, triggerPhonemes))
+            {
+                throw new InvalidOperationException("The trigger text must be the exact final phrase of its incantation text.");
+            }
 
             return new CompiledIncantation(
                 definition.SpellId,
@@ -58,6 +62,27 @@ namespace H1M4W4R1.Incantia.Database
             }
 
             return phonemes;
+        }
+
+        private static bool EndsWith(in PhonemeSequence source, in PhonemeSequence suffix)
+        {
+            if (suffix.Length > source.Length)
+            {
+                return false;
+            }
+
+            ReadOnlySpan<PhonemeId> sourcePhonemes = source.AsSpan();
+            ReadOnlySpan<PhonemeId> suffixPhonemes = suffix.AsSpan();
+            int startIndex = sourcePhonemes.Length - suffixPhonemes.Length;
+            for (int phonemeIndex = 0; phonemeIndex < suffixPhonemes.Length; phonemeIndex++)
+            {
+                if (sourcePhonemes[startIndex + phonemeIndex] != suffixPhonemes[phonemeIndex])
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private PhonemeSequence CreateConsonantSequence(in PhonemeSequence phonemes)

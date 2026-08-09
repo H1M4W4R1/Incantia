@@ -87,6 +87,62 @@ namespace H1M4W4R1.Incantia.Tests
         }
 
         [Test]
+        public void Match_TriggerOnlyObservation_RejectsAnImperfectTrigger()
+        {
+            WeightedPhonemeDistance distance = CreateDistance();
+            CompiledIncantation arcaneBarrier = CreateIncantation(distance, "ArcaneBarrier", new ushort[] { 3, 1, 2, 4, 3, 1 }, new ushort[] { 3, 1 });
+            IncantationMatcherConfig config = CreateConfig();
+            config.AllowTriggerOnlyRecognition = true;
+            config.MinimumTriggerOnlyScore = 0f;
+            config.MinimumTriggerOnlyMargin = 0f;
+            IncantationMatcher matcher = new IncantationMatcher(new List<CompiledIncantation> { arcaneBarrier }, distance, config);
+            PhonemeSequence observed = CreateSequence(new ushort[] { 3, 2 });
+            PhoneticObservation observation = PhoneticObservation.Create(observed, distance.CostModel.Inventory);
+
+            IncantationMatchResult result = matcher.Match("en", observation);
+
+            Assert.That(result.Accepted, Is.False);
+            Assert.That(result.MatchKind, Is.EqualTo(IncantationMatchKind.None));
+        }
+
+        [Test]
+        public void Match_IncompleteIncantationBeforeItsTerminalTrigger_DoesNotCastQuickSpell()
+        {
+            WeightedPhonemeDistance distance = CreateDistance();
+            CompiledIncantation arcaneBarrier = CreateIncantation(distance, "ArcaneBarrier", new ushort[] { 2, 4, 3, 1 }, new ushort[] { 3, 1 });
+            IncantationMatcherConfig config = CreateConfig();
+            config.AllowTrailingSpeech = true;
+            config.AllowTriggerOnlyRecognition = true;
+            IncantationMatcher matcher = new IncantationMatcher(new List<CompiledIncantation> { arcaneBarrier }, distance, config);
+            PhonemeSequence observed = CreateSequence(new ushort[] { 2, 4 });
+            PhoneticObservation observation = PhoneticObservation.Create(observed, distance.CostModel.Inventory);
+
+            IncantationMatchResult result = matcher.Match("en", observation);
+
+            Assert.That(result.Accepted, Is.False);
+            Assert.That(result.MatchKind, Is.EqualTo(IncantationMatchKind.None));
+        }
+
+        [Test]
+        public void Match_CompleteIncantationWithAnImperfectTerminalTrigger_DoesNotCast()
+        {
+            WeightedPhonemeDistance distance = CreateDistance();
+            CompiledIncantation fireball = CreateIncantation(distance, "Fireball", new ushort[] { 3, 1, 2, 4 }, new ushort[] { 2, 4 });
+            IncantationMatcherConfig config = CreateConfig();
+            config.MinimumScore = 0f;
+            config.MinimumMargin = 0f;
+            config.MinimumTriggerScore = 0f;
+            IncantationMatcher matcher = new IncantationMatcher(new List<CompiledIncantation> { fireball }, distance, config);
+            PhonemeSequence observed = CreateSequence(new ushort[] { 3, 1, 2, 3 });
+            PhoneticObservation observation = PhoneticObservation.Create(observed, distance.CostModel.Inventory);
+
+            IncantationMatchResult result = matcher.Match("en", observation);
+
+            Assert.That(result.Accepted, Is.False);
+            Assert.That(result.MatchKind, Is.EqualTo(IncantationMatchKind.None));
+        }
+
+        [Test]
         public void Match_TriggerOnlyObservation_IsDisabledByDefault()
         {
             WeightedPhonemeDistance distance = CreateDistance();
@@ -103,7 +159,7 @@ namespace H1M4W4R1.Incantia.Tests
         }
 
         [Test]
-        public void Match_TrailingSpeechAfterCompleteIncantation_AcceptsWhenEnabledAndReportsTriggerPosition()
+        public void Match_BulkTranscriptAroundCompleteIncantation_AcceptsFullSpell()
         {
             WeightedPhonemeDistance distance = CreateDistance();
             CompiledIncantation arcaneBarrier = CreateIncantation(distance, "ArcaneBarrier", new ushort[] { 3, 1, 2, 4, 3, 1 }, new ushort[] { 3, 1 });
@@ -112,16 +168,17 @@ namespace H1M4W4R1.Incantia.Tests
             IncantationMatcherConfig config = CreateConfig();
             config.AllowTrailingSpeech = true;
             IncantationMatcher matcher = new IncantationMatcher(incantations, distance, config);
-            PhonemeSequence observed = CreateSequence(new ushort[] { 3, 1, 2, 4, 3, 1, 4, 2, 1 });
+            PhonemeSequence observed = CreateSequence(new ushort[] { 4, 2, 3, 1, 2, 4, 3, 1, 4, 2, 1 });
             PhoneticObservation observation = PhoneticObservation.Create(observed, distance.CostModel.Inventory);
 
             IncantationMatchResult result = matcher.Match("en", observation);
 
             Assert.That(result.Best.Incantation.SpellId, Is.EqualTo("ArcaneBarrier"));
             Assert.That(result.Best.FullPhoneme, Is.EqualTo(1f));
-            Assert.That(result.Best.Trigger, Is.EqualTo(1f));
-            Assert.That(result.Best.TriggerEndPhonemeIndex, Is.EqualTo(6));
+            Assert.That(result.Best.FullEndPhonemeIndex, Is.EqualTo(8));
+            Assert.That(result.Best.TriggerEndPhonemeIndex, Is.EqualTo(8));
             Assert.That(result.Accepted, Is.True);
+            Assert.That(result.MatchKind, Is.EqualTo(IncantationMatchKind.FullIncantation));
         }
 
         private static IncantationMatcherConfig CreateConfig()
