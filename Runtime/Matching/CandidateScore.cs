@@ -12,7 +12,6 @@ namespace H1M4W4R1.Incantia.Matching
             float consonantSkeleton,
             float trigger,
             float observedLengthRatio,
-            int fullEndPhonemeIndex,
             int triggerEndPhonemeIndex)
         {
             Incantation = incantation;
@@ -21,7 +20,6 @@ namespace H1M4W4R1.Incantia.Matching
             ConsonantSkeleton = consonantSkeleton;
             Trigger = trigger;
             ObservedLengthRatio = observedLengthRatio;
-            FullEndPhonemeIndex = fullEndPhonemeIndex;
             TriggerEndPhonemeIndex = triggerEndPhonemeIndex;
         }
 
@@ -32,8 +30,6 @@ namespace H1M4W4R1.Incantia.Matching
         public float ConsonantSkeleton { get; }
         public float Trigger { get; }
         public float ObservedLengthRatio { get; }
-        /// <summary>Exclusive observed-phoneme index where the full incantation match ends.</summary>
-        public int FullEndPhonemeIndex { get; }
         /// <summary>Exclusive observed-phoneme index where the matched trigger ends. Zero when no trigger is present.</summary>
         public int TriggerEndPhonemeIndex { get; }
     }

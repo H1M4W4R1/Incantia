@@ -11,12 +11,12 @@ namespace H1M4W4R1.Incantia.Matching
         public float TriggerWeight { get; set; } = 0.15f;
         public float MinimumScore { get; set; } = 0.70f;
         public float MinimumMargin { get; set; } = 0.08f;
-        public float MinimumTriggerScore { get; set; } = 0.92f;
-        /// <summary>Allows the full-reference score to occur before later observed speech. Trigger acceptance remains terminal-only.</summary>
+        public float MinimumTriggerScore { get; set; } = 0.60f;
+        /// <summary>Allows a full spell and its trigger to occur before later observed speech. Intended for real-time windows.</summary>
         public bool AllowTrailingSpeech { get; set; }
-        /// <summary>Enables exact standalone trigger recognition when a full incantation is not accepted.</summary>
+        /// <summary>Enables high-confidence trigger-word recognition when a full incantation is not accepted.</summary>
         public bool AllowTriggerOnlyRecognition { get; set; }
-        public float MinimumTriggerOnlyScore { get; set; } = 1f;
+        public float MinimumTriggerOnlyScore { get; set; } = 0.92f;
         public float MinimumTriggerOnlyMargin { get; set; } = 0.12f;
         public float MinimumObservedLengthRatio { get; set; } = 0.50f;
         public int MinimumObservedPhonemeCount { get; set; } = 3;
