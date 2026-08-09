@@ -2,7 +2,7 @@
 
 Incantia provides Unity-independent, closed-set phonetic matching for spell incantations. It accepts a phoneme stream produced by a language-specific `IPhonemizer`, compares each spell against the terminal portion of the transcript, and only accepts a winner when score, score margin, trigger, and length safeguards pass. Unrelated speech before a complete, terminal incantation does not lower its full or consonant score.
 
-For mastered quick spells, set `IncantationMatcherConfig.AllowTriggerOnlyRecognition` to `true`. This is a secondary path used only when full-incantation acceptance fails; it requires a complete terminal trigger, `MinimumTriggerOnlyScore` (default `0.92`), and `MinimumTriggerOnlyMargin` (default `0.12`). Give every quick spell a distinctive trigger.
+For mastered quick spells, set `IncantationMatcherConfig.AllowTriggerOnlyRecognition` to `true`. This is a secondary path used only when full-incantation acceptance fails; it requires a complete terminal trigger, `MinimumTriggerOnlyScore` (default `0.92`), and `MinimumTriggerOnlyMargin` (default `0.12`). Give every quick spell a distinctive trigger. Set `SuppressTriggerOnlyRecognitionDuringPartialIncantation` to prevent a quick trigger from firing while the terminal transcript is a valid unfinished prefix of any configured incantation; the partial check uses the same score, margin, and length safeguards as full recognition.
 
 ## Runtime flow
 
@@ -36,7 +36,7 @@ Call `BeginRecording()` and `EndRecordingAndRecognize()` from your Unity UI. The
 
 ## Realtime spells
 
-Derive from `EnglishRealtimeIncantationRecognitionBehaviour` for continuous spells. Call `BeginListening()` and `StopListening()` from Unity UI. It captures non-overlapping 16 kHz microphone blocks, uses voice-activity gating, and queues each active block once while Whisper is busy. After Whisper returns, only the text is retained in a transcript cache; Incantia matches against that cache and sends callbacks on Unity's main thread. A successful cast clears the consumed transcript cache before the next queued block is processed, so already-transcribed speech is never sent through Whisper again. Override `OnRecognitionUpdated(...)` for live transcript/phoneme UI and `OnSpellRecognized(...)` for gameplay; rejected or ambiguous snapshots never call `OnSpellRecognized(...)`.
+Derive from `EnglishRealtimeIncantationRecognitionBehaviour` for continuous spells. Call `BeginListening()` and `StopListening()` from Unity UI. It captures non-overlapping 16 kHz microphone blocks, uses voice-activity gating, and queues each active block once while Whisper is busy. After Whisper returns, only the text is retained in a transcript cache; Incantia matches against that cache and sends callbacks on Unity's main thread. After a cast, it consumes the preceding text and that incantation only, preserving trailing words in the same Whisper result for the next cast. The default real-time matcher also suppresses quick triggers while a valid partial incantation is in progress. Override `OnRecognitionUpdated(...)` for live transcript/phoneme UI and `OnSpellRecognized(...)` for gameplay; rejected or ambiguous snapshots never call `OnSpellRecognized(...)`.
 
 Override `CreateMatcherConfig()` and enable `AllowTriggerOnlyRecognition` only for deliberately distinct quick-spell trigger words. The default high quick-spell threshold is `0.92`; tune it with real transcript samples before release.
 

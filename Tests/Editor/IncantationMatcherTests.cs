@@ -103,6 +103,28 @@ namespace H1M4W4R1.Incantia.Tests
         }
 
         [Test]
+        public void Match_PartialIncantationWithEarlyTrigger_DoesNotCast()
+        {
+            WeightedPhonemeDistance distance = CreateDistance();
+            CompiledIncantation arcaneBarrier = CreateIncantation(distance, "ArcaneBarrier", new ushort[] { 3, 1, 2, 4, 3, 1 }, new ushort[] { 3, 1 });
+            List<CompiledIncantation> incantations = new List<CompiledIncantation> { arcaneBarrier };
+            IncantationMatcherConfig config = CreateConfig();
+            config.AllowTrailingSpeech = true;
+            config.AllowTriggerOnlyRecognition = true;
+            config.SuppressTriggerOnlyRecognitionDuringPartialIncantation = true;
+            IncantationMatcher matcher = new IncantationMatcher(incantations, distance, config);
+            PhonemeSequence observed = CreateSequence(new ushort[] { 3, 1, 2, 4 });
+            PhoneticObservation observation = PhoneticObservation.Create(observed, distance.CostModel.Inventory);
+
+            IncantationMatchResult result = matcher.Match("en", observation);
+
+            Assert.That(result.Best.TriggerEndPhonemeIndex, Is.EqualTo(2));
+            Assert.That(result.Best.FullIncantationEndPhonemeIndex, Is.EqualTo(4));
+            Assert.That(result.Accepted, Is.False);
+            Assert.That(result.MatchKind, Is.EqualTo(IncantationMatchKind.None));
+        }
+
+        [Test]
         public void Match_TrailingSpeechAfterCompleteIncantation_AcceptsWhenEnabledAndReportsTriggerPosition()
         {
             WeightedPhonemeDistance distance = CreateDistance();

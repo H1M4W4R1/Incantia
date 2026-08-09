@@ -59,6 +59,37 @@ namespace H1M4W4R1.Incantia.Tests
             Assert.That(result.RejectionReason, Is.EqualTo(RecognitionRejectionReason.NoSpeech));
         }
 
+        [Test]
+        public void ConsumeAcceptedTranscript_PreservesSpeechAfterFirstIncantation()
+        {
+            EnglishPhonemizer phonemizer = new EnglishPhonemizer();
+            PhonemeCostModel costModel = EnglishPhonemeProfile.CreateCostModel();
+            WeightedPhonemeDistance distance = new WeightedPhonemeDistance(costModel);
+            IncantationCompiler compiler = new IncantationCompiler(phonemizer, distance);
+            CompiledIncantation incantation = compiler.Compile(new IncantationDefinition(
+                "Fireball",
+                "en",
+                "flame of the ancient sun fireball",
+                "fireball"));
+            List<CompiledIncantation> incantations = new List<CompiledIncantation> { incantation };
+            IncantationMatcherConfig config = CreateConfig();
+            config.AllowTrailingSpeech = true;
+            IncantationMatcher matcher = new IncantationMatcher(incantations, distance, config);
+            IncantationRecognizer recognizer = new IncantationRecognizer(phonemizer, costModel.Inventory, matcher);
+            string transcript = "Flame of the ancient sun. Fireball! Flame of the ancient sun";
+            IncantationRecognitionRequest request = new IncantationRecognitionRequest(transcript, "en", 84);
+
+            IncantationRecognitionResult acceptedResult = recognizer.Recognize(request);
+            string remainingTranscript = IncantationTranscriptConsumer.ConsumeAcceptedTranscript(
+                transcript,
+                "en",
+                recognizer,
+                acceptedResult);
+
+            Assert.That(acceptedResult.Accepted, Is.True);
+            Assert.That(remainingTranscript, Is.EqualTo("Flame of the ancient sun"));
+        }
+
         private static IncantationMatcherConfig CreateConfig()
         {
             return new IncantationMatcherConfig

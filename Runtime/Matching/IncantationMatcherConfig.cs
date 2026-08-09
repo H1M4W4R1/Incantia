@@ -16,6 +16,12 @@ namespace H1M4W4R1.Incantia.Matching
         public bool AllowTrailingSpeech { get; set; }
         /// <summary>Enables high-confidence trigger-word recognition when a full incantation is not accepted.</summary>
         public bool AllowTriggerOnlyRecognition { get; set; }
+        /// <summary>
+        /// Prevents a quick trigger from casting while the terminal transcript is a valid unfinished prefix of any
+        /// configured incantation. This is useful for batched ASR transcripts where a trigger word can arrive before
+        /// Whisper has returned the rest of the phrase.
+        /// </summary>
+        public bool SuppressTriggerOnlyRecognitionDuringPartialIncantation { get; set; }
         public float MinimumTriggerOnlyScore { get; set; } = 0.92f;
         public float MinimumTriggerOnlyMargin { get; set; } = 0.12f;
         public float MinimumObservedLengthRatio { get; set; } = 0.50f;

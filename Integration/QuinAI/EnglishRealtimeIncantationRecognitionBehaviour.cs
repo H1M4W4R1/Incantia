@@ -162,6 +162,7 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
         {
             IncantationMatcherConfig config = new IncantationMatcherConfig();
             config.AllowTrailingSpeech = true;
+            config.SuppressTriggerOnlyRecognitionDuringPartialIncantation = true;
             return config;
         }
 
@@ -422,7 +423,7 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
                 OnRecognitionUpdated(result);
                 if (result.Accepted)
                 {
-                    ClearCachedTranscriptAfterSpell();
+                    ConsumeCachedTranscriptAfterSpell(result);
                     OnSpellRecognized(result);
                 }
             }
@@ -523,9 +524,19 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
             _remainingVoiceWindows = 0;
         }
 
-        private void ClearCachedTranscriptAfterSpell()
+        private void ConsumeCachedTranscriptAfterSpell(in IncantationRecognitionResult result)
         {
+            string remainingTranscript = IncantationTranscriptConsumer.ConsumeAcceptedTranscript(
+                CreateCachedTranscript(),
+                "en",
+                _recognizer,
+                result);
             _transcriptSegments.Clear();
+            if (!string.IsNullOrEmpty(remainingTranscript))
+            {
+                _transcriptSegments.Add(new TranscriptSegment(remainingTranscript));
+            }
+
             _remainingVoiceWindows = 0;
         }
     }
