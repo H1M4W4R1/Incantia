@@ -1,0 +1,21 @@
+{
+  "name": "H1M4W4R1.Incantia.EditorTests",
+  "rootNamespace": "H1M4W4R1.Incantia.Tests",
+  "references": [
+    "H1M4W4R1.Incantia.Runtime"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": true,
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}
