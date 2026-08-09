@@ -44,6 +44,26 @@ namespace H1M4W4R1.Incantia.Tests
             Assert.That(result.Accepted, Is.False);
         }
 
+        [Test]
+        public void Match_LeadingGibberishBeforeCompleteTerminalIncantation_AcceptsTerminalSpell()
+        {
+            WeightedPhonemeDistance distance = CreateDistance();
+            CompiledIncantation arcaneBarrier = CreateIncantation(distance, "ArcaneBarrier", new ushort[] { 3, 1, 2, 4, 3, 1 }, new ushort[] { 3, 1 });
+            CompiledIncantation meteor = CreateIncantation(distance, "Meteor", new ushort[] { 4, 2, 1, 3, 4, 2 }, new ushort[] { 4, 2 });
+            List<CompiledIncantation> incantations = new List<CompiledIncantation> { arcaneBarrier, meteor };
+            IncantationMatcher matcher = new IncantationMatcher(incantations, distance, CreateConfig());
+            PhonemeSequence observed = CreateSequence(new ushort[] { 4, 2, 1, 3, 4, 2, 3, 1, 2, 4, 3, 1 });
+            PhoneticObservation observation = PhoneticObservation.Create(observed, distance.CostModel.Inventory);
+
+            IncantationMatchResult result = matcher.Match("en", observation);
+
+            Assert.That(result.Best.Incantation.SpellId, Is.EqualTo("ArcaneBarrier"));
+            Assert.That(result.Best.FullPhoneme, Is.EqualTo(1f));
+            Assert.That(result.Best.ConsonantSkeleton, Is.EqualTo(1f));
+            Assert.That(result.Best.Trigger, Is.EqualTo(1f));
+            Assert.That(result.Accepted, Is.True);
+        }
+
         private static IncantationMatcherConfig CreateConfig()
         {
             return new IncantationMatcherConfig

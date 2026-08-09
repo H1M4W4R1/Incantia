@@ -1,6 +1,6 @@
 # Incantia
 
-Incantia provides Unity-independent, closed-set phonetic matching for spell incantations. It accepts a phoneme stream produced by a language-specific `IPhonemizer`, compares it against precompiled spell references, and only accepts a winner when score, score margin, trigger, and length safeguards pass.
+Incantia provides Unity-independent, closed-set phonetic matching for spell incantations. It accepts a phoneme stream produced by a language-specific `IPhonemizer`, compares each spell against the terminal portion of the transcript, and only accepts a winner when score, score margin, trigger, and length safeguards pass. Unrelated speech before a complete, terminal incantation does not lower its full or consonant score.
 
 ## Runtime flow
 

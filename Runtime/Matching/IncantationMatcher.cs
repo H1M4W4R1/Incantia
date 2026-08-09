@@ -63,7 +63,7 @@ namespace H1M4W4R1.Incantia.Matching
 
         private CandidateScore Evaluate(CompiledIncantation incantation, in PhoneticObservation observation)
         {
-            float fullScore = _distance.CalculateSimilarity(incantation.Phonemes.AsSpan(), observation.Phonemes.AsSpan(), _workspace);
+            float fullScore = _distance.CalculateTerminalSimilarity(incantation.Phonemes.AsSpan(), observation.Phonemes.AsSpan(), _workspace);
             float consonantScore = CalculateConsonantScore(incantation, observation);
             float triggerScore = incantation.HasTrigger
                 ? CalculateTerminalTriggerScore(incantation.TriggerPhonemes, observation.Phonemes)
@@ -88,7 +88,7 @@ namespace H1M4W4R1.Incantia.Matching
                 return 0f;
             }
 
-            return _distance.CalculateSimilarity(incantation.Consonants.AsSpan(), observation.Consonants.AsSpan(), _workspace);
+            return _distance.CalculateTerminalSimilarity(incantation.Consonants.AsSpan(), observation.Consonants.AsSpan(), _workspace);
         }
 
         private float CalculateTerminalTriggerScore(in PhonemeSequence trigger, in PhonemeSequence observed)
