@@ -106,6 +106,37 @@ namespace H1M4W4R1.Incantia.Phonetics
             return Clamp01(1f - (distance / normalizer));
         }
 
+        /// <summary>
+        /// Calculates similarity between a reference and any contiguous portion of an observation.
+        /// The returned end index is exclusive and identifies where the best observed portion ends.
+        /// </summary>
+        public float CalculateSubsequenceSimilarity(
+            ReadOnlySpan<PhonemeId> reference,
+            ReadOnlySpan<PhonemeId> observed,
+            PhonemeDistanceWorkspace workspace,
+            out int matchedEndIndex)
+        {
+            matchedEndIndex = 0;
+            if (reference.Length == 0 && observed.Length == 0)
+            {
+                return 1f;
+            }
+
+            if (reference.Length == 0 || observed.Length == 0)
+            {
+                return 0f;
+            }
+
+            float distance = CalculateSubsequenceDistance(reference, observed, workspace, out matchedEndIndex);
+            float normalizer = CalculateDeletionCost(reference);
+            if (normalizer <= 0f)
+            {
+                return 1f;
+            }
+
+            return Clamp01(1f - (distance / normalizer));
+        }
+
         public float CalculateDeletionCost(ReadOnlySpan<PhonemeId> phonemes)
         {
             float total = 0f;
@@ -152,6 +183,56 @@ namespace H1M4W4R1.Incantia.Phonetics
             }
 
             return previous[observed.Length];
+        }
+
+        private float CalculateSubsequenceDistance(
+            ReadOnlySpan<PhonemeId> reference,
+            ReadOnlySpan<PhonemeId> observed,
+            PhonemeDistanceWorkspace workspace,
+            out int matchedEndIndex)
+        {
+            if (ReferenceEquals(workspace, null))
+            {
+                throw new ArgumentNullException(nameof(workspace));
+            }
+
+            workspace.EnsureCapacity(observed.Length + 1);
+            Span<float> previous = workspace.Previous;
+            for (int observedIndex = 0; observedIndex <= observed.Length; observedIndex++)
+            {
+                previous[observedIndex] = 0f;
+            }
+
+            for (int referenceIndex = 1; referenceIndex <= reference.Length; referenceIndex++)
+            {
+                Span<float> current = workspace.Current;
+                PhonemeId referencePhoneme = reference[referenceIndex - 1];
+                current[0] = previous[0] + CostModel.GetDeletionCost(referencePhoneme);
+                for (int observedIndex = 1; observedIndex <= observed.Length; observedIndex++)
+                {
+                    float deletion = previous[observedIndex] + CostModel.GetDeletionCost(referencePhoneme);
+                    float insertion = current[observedIndex - 1] + CostModel.GetInsertionCost(observed[observedIndex - 1]);
+                    float substitution = previous[observedIndex - 1] + CostModel.GetSubstitutionCost(referencePhoneme, observed[observedIndex - 1]);
+                    current[observedIndex] = GetMinimum(deletion, insertion, substitution);
+                }
+
+                workspace.SwapRows();
+                previous = workspace.Previous;
+            }
+
+            int bestEndIndex = 1;
+            float bestDistance = previous[bestEndIndex];
+            for (int observedIndex = 2; observedIndex <= observed.Length; observedIndex++)
+            {
+                if (previous[observedIndex] <= bestDistance)
+                {
+                    bestDistance = previous[observedIndex];
+                    bestEndIndex = observedIndex;
+                }
+            }
+
+            matchedEndIndex = bestEndIndex;
+            return bestDistance;
         }
 
         public float CalculateInsertionCost(ReadOnlySpan<PhonemeId> phonemes)

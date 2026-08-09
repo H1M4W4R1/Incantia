@@ -12,6 +12,8 @@ namespace H1M4W4R1.Incantia.Matching
         public float MinimumScore { get; set; } = 0.70f;
         public float MinimumMargin { get; set; } = 0.08f;
         public float MinimumTriggerScore { get; set; } = 0.60f;
+        /// <summary>Allows a full spell and its trigger to occur before later observed speech. Intended for real-time windows.</summary>
+        public bool AllowTrailingSpeech { get; set; }
         /// <summary>Enables high-confidence trigger-word recognition when a full incantation is not accepted.</summary>
         public bool AllowTriggerOnlyRecognition { get; set; }
         public float MinimumTriggerOnlyScore { get; set; } = 0.92f;
