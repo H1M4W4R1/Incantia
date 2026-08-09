@@ -1,40 +1,57 @@
 using System;
+using H1M4W4R1.Incantia.Matching;
+using H1M4W4R1.Incantia.Phonetics;
 
 namespace H1M4W4R1.Incantia.Recognition
 {
     /// <summary>
-    /// Removes only the leading speech through an accepted spell. Later words remain available for the next real-time
-    /// recognition pass when an ASR provider returns more than one phrase in a single transcript.
+    /// Removes only the leading speech through an accepted spell. It phonemizes each source word once to map the
+    /// matcher's phoneme endpoint back to a text boundary, leaving later words available for the next recognition pass.
     /// </summary>
     public static class IncantationTranscriptConsumer
     {
         public static string ConsumeAcceptedTranscript(
             string transcript,
-            string language,
-            IncantationRecognizer recognizer,
+            IPhonemizer phonemizer,
             in IncantationRecognitionResult acceptedResult)
         {
-            if (string.IsNullOrEmpty(transcript) || string.IsNullOrWhiteSpace(language) || ReferenceEquals(recognizer, null) || !acceptedResult.Accepted)
+            if (string.IsNullOrEmpty(transcript) || ReferenceEquals(phonemizer, null) || !acceptedResult.Accepted)
             {
                 return transcript ?? string.Empty;
             }
 
-            int wordEndExclusive = 0;
-            while (TryGetNextWordEnd(transcript, wordEndExclusive, out wordEndExclusive))
+            int requiredPhonemeCount = GetConsumedPhonemeCount(acceptedResult);
+            if (requiredPhonemeCount <= 0)
             {
-                string candidateTranscript = transcript.Substring(0, wordEndExclusive);
-                IncantationRecognitionRequest request = new IncantationRecognitionRequest(candidateTranscript, language, acceptedResult.Sequence);
-                IncantationRecognitionResult candidateResult = recognizer.Recognize(request);
-                if (IsSameAcceptedSpell(candidateResult, acceptedResult))
+                return string.Empty;
+            }
+
+            int wordStartIndex = 0;
+            int consumedPhonemeCount = 0;
+            while (TryGetNextWord(transcript, wordStartIndex, out int wordEndExclusive))
+            {
+                string word = transcript.Substring(wordStartIndex, wordEndExclusive - wordStartIndex);
+                consumedPhonemeCount += phonemizer.Phonemize(word).Length;
+                if (consumedPhonemeCount >= requiredPhonemeCount)
                 {
                     return TrimLeadingWhitespace(transcript, wordEndExclusive);
                 }
+
+                wordStartIndex = wordEndExclusive;
             }
 
             return string.Empty;
         }
 
-        private static bool TryGetNextWordEnd(string text, int startIndex, out int wordEndExclusive)
+        private static int GetConsumedPhonemeCount(in IncantationRecognitionResult acceptedResult)
+        {
+            CandidateScore best = acceptedResult.Match.Best;
+            return acceptedResult.Match.MatchKind == IncantationMatchKind.FullIncantation
+                ? best.FullIncantationEndPhonemeIndex
+                : best.TriggerEndPhonemeIndex;
+        }
+
+        private static bool TryGetNextWord(string text, int startIndex, out int wordEndExclusive)
         {
             int characterIndex = startIndex;
             while (characterIndex < text.Length && char.IsWhiteSpace(text[characterIndex]))
@@ -42,25 +59,14 @@ namespace H1M4W4R1.Incantia.Recognition
                 characterIndex++;
             }
 
+            int wordStartIndex = characterIndex;
             while (characterIndex < text.Length && !char.IsWhiteSpace(text[characterIndex]))
             {
                 characterIndex++;
             }
 
             wordEndExclusive = characterIndex;
-            return wordEndExclusive > startIndex;
-        }
-
-        private static bool IsSameAcceptedSpell(
-            in IncantationRecognitionResult candidateResult,
-            in IncantationRecognitionResult acceptedResult)
-        {
-            return candidateResult.Accepted &&
-                candidateResult.Match.MatchKind == acceptedResult.Match.MatchKind &&
-                string.Equals(
-                    candidateResult.Match.Best.Incantation.SpellId,
-                    acceptedResult.Match.Best.Incantation.SpellId,
-                    StringComparison.Ordinal);
+            return wordEndExclusive > wordStartIndex;
         }
 
         private static string TrimLeadingWhitespace(string text, int startIndex)

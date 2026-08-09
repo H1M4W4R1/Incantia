@@ -82,8 +82,7 @@ namespace H1M4W4R1.Incantia.Tests
             IncantationRecognitionResult acceptedResult = recognizer.Recognize(request);
             string remainingTranscript = IncantationTranscriptConsumer.ConsumeAcceptedTranscript(
                 transcript,
-                "en",
-                recognizer,
+                phonemizer,
                 acceptedResult);
 
             Assert.That(acceptedResult.Accepted, Is.True);

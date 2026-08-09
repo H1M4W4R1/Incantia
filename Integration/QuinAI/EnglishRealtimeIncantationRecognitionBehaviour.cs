@@ -528,8 +528,7 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
         {
             string remainingTranscript = IncantationTranscriptConsumer.ConsumeAcceptedTranscript(
                 CreateCachedTranscript(),
-                "en",
-                _recognizer,
+                _phonemizer,
                 result);
             _transcriptSegments.Clear();
             if (!string.IsNullOrEmpty(remainingTranscript))
