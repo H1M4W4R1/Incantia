@@ -24,21 +24,25 @@ namespace H1M4W4R1.Incantia.Phonetics
 
             workspace.EnsureCapacity(observed.Length + 1);
             Span<float> previous = workspace.Previous;
+            Span<float> insertionCosts = workspace.InsertionCosts;
             previous[0] = 0f;
             for (int observedIndex = 1; observedIndex <= observed.Length; observedIndex++)
             {
-                previous[observedIndex] = previous[observedIndex - 1] + CostModel.GetInsertionCost(observed[observedIndex - 1]);
+                float insertionCost = CostModel.GetInsertionCost(observed[observedIndex - 1]);
+                insertionCosts[observedIndex] = insertionCost;
+                previous[observedIndex] = previous[observedIndex - 1] + insertionCost;
             }
 
             for (int referenceIndex = 1; referenceIndex <= reference.Length; referenceIndex++)
             {
                 Span<float> current = workspace.Current;
                 PhonemeId referencePhoneme = reference[referenceIndex - 1];
-                current[0] = previous[0] + CostModel.GetDeletionCost(referencePhoneme);
+                float deletionCost = CostModel.GetDeletionCost(referencePhoneme);
+                current[0] = previous[0] + deletionCost;
                 for (int observedIndex = 1; observedIndex <= observed.Length; observedIndex++)
                 {
-                    float deletion = previous[observedIndex] + CostModel.GetDeletionCost(referencePhoneme);
-                    float insertion = current[observedIndex - 1] + CostModel.GetInsertionCost(observed[observedIndex - 1]);
+                    float deletion = previous[observedIndex] + deletionCost;
+                    float insertion = current[observedIndex - 1] + insertionCosts[observedIndex];
                     float substitution = previous[observedIndex - 1] + CostModel.GetSubstitutionCost(referencePhoneme, observed[observedIndex - 1]);
                     current[observedIndex] = GetMinimum(deletion, insertion, substitution);
                 }
@@ -65,9 +69,19 @@ namespace H1M4W4R1.Incantia.Phonetics
                 return 0f;
             }
 
-            float distance = CalculateDistance(reference, observed, workspace);
             float referenceDeletionCost = CalculateDeletionCost(reference);
             float observedInsertionCost = CalculateInsertionCost(observed);
+            return CalculateSimilarity(reference, observed, referenceDeletionCost, observedInsertionCost, workspace);
+        }
+
+        internal float CalculateSimilarity(
+            ReadOnlySpan<PhonemeId> reference,
+            ReadOnlySpan<PhonemeId> observed,
+            float referenceDeletionCost,
+            float observedInsertionCost,
+            PhonemeDistanceWorkspace workspace)
+        {
+            float distance = CalculateDistance(reference, observed, workspace);
             float normalizer = referenceDeletionCost >= observedInsertionCost ? referenceDeletionCost : observedInsertionCost;
             if (normalizer <= 0f)
             {
@@ -96,8 +110,18 @@ namespace H1M4W4R1.Incantia.Phonetics
                 return 0f;
             }
 
-            float distance = CalculateTerminalDistance(reference, observed, workspace);
             float normalizer = CalculateDeletionCost(reference);
+            return CalculateTerminalSimilarity(reference, observed, normalizer, workspace);
+        }
+
+        internal float CalculateTerminalSimilarity(
+            ReadOnlySpan<PhonemeId> reference,
+            ReadOnlySpan<PhonemeId> observed,
+            float referenceDeletionCost,
+            PhonemeDistanceWorkspace workspace)
+        {
+            float distance = CalculateTerminalDistance(reference, observed, workspace);
+            float normalizer = referenceDeletionCost;
             if (normalizer <= 0f)
             {
                 return 1f;
@@ -127,8 +151,19 @@ namespace H1M4W4R1.Incantia.Phonetics
                 return 0f;
             }
 
-            float distance = CalculateSubsequenceDistance(reference, observed, workspace, out matchedEndIndex);
             float normalizer = CalculateDeletionCost(reference);
+            return CalculateSubsequenceSimilarity(reference, observed, normalizer, workspace, out matchedEndIndex);
+        }
+
+        internal float CalculateSubsequenceSimilarity(
+            ReadOnlySpan<PhonemeId> reference,
+            ReadOnlySpan<PhonemeId> observed,
+            float referenceDeletionCost,
+            PhonemeDistanceWorkspace workspace,
+            out int matchedEndIndex)
+        {
+            float distance = CalculateSubsequenceDistance(reference, observed, workspace, out matchedEndIndex);
+            float normalizer = referenceDeletionCost;
             if (normalizer <= 0f)
             {
                 return 1f;
@@ -160,20 +195,26 @@ namespace H1M4W4R1.Incantia.Phonetics
 
             workspace.EnsureCapacity(observed.Length + 1);
             Span<float> previous = workspace.Previous;
+            Span<float> insertionCosts = workspace.InsertionCosts;
             for (int observedIndex = 0; observedIndex <= observed.Length; observedIndex++)
             {
                 previous[observedIndex] = 0f;
+                if (observedIndex > 0)
+                {
+                    insertionCosts[observedIndex] = CostModel.GetInsertionCost(observed[observedIndex - 1]);
+                }
             }
 
             for (int referenceIndex = 1; referenceIndex <= reference.Length; referenceIndex++)
             {
                 Span<float> current = workspace.Current;
                 PhonemeId referencePhoneme = reference[referenceIndex - 1];
-                current[0] = previous[0] + CostModel.GetDeletionCost(referencePhoneme);
+                float deletionCost = CostModel.GetDeletionCost(referencePhoneme);
+                current[0] = previous[0] + deletionCost;
                 for (int observedIndex = 1; observedIndex <= observed.Length; observedIndex++)
                 {
-                    float deletion = previous[observedIndex] + CostModel.GetDeletionCost(referencePhoneme);
-                    float insertion = current[observedIndex - 1] + CostModel.GetInsertionCost(observed[observedIndex - 1]);
+                    float deletion = previous[observedIndex] + deletionCost;
+                    float insertion = current[observedIndex - 1] + insertionCosts[observedIndex];
                     float substitution = previous[observedIndex - 1] + CostModel.GetSubstitutionCost(referencePhoneme, observed[observedIndex - 1]);
                     current[observedIndex] = GetMinimum(deletion, insertion, substitution);
                 }
@@ -198,20 +239,26 @@ namespace H1M4W4R1.Incantia.Phonetics
 
             workspace.EnsureCapacity(observed.Length + 1);
             Span<float> previous = workspace.Previous;
+            Span<float> insertionCosts = workspace.InsertionCosts;
             for (int observedIndex = 0; observedIndex <= observed.Length; observedIndex++)
             {
                 previous[observedIndex] = 0f;
+                if (observedIndex > 0)
+                {
+                    insertionCosts[observedIndex] = CostModel.GetInsertionCost(observed[observedIndex - 1]);
+                }
             }
 
             for (int referenceIndex = 1; referenceIndex <= reference.Length; referenceIndex++)
             {
                 Span<float> current = workspace.Current;
                 PhonemeId referencePhoneme = reference[referenceIndex - 1];
-                current[0] = previous[0] + CostModel.GetDeletionCost(referencePhoneme);
+                float deletionCost = CostModel.GetDeletionCost(referencePhoneme);
+                current[0] = previous[0] + deletionCost;
                 for (int observedIndex = 1; observedIndex <= observed.Length; observedIndex++)
                 {
-                    float deletion = previous[observedIndex] + CostModel.GetDeletionCost(referencePhoneme);
-                    float insertion = current[observedIndex - 1] + CostModel.GetInsertionCost(observed[observedIndex - 1]);
+                    float deletion = previous[observedIndex] + deletionCost;
+                    float insertion = current[observedIndex - 1] + insertionCosts[observedIndex];
                     float substitution = previous[observedIndex - 1] + CostModel.GetSubstitutionCost(referencePhoneme, observed[observedIndex - 1]);
                     current[observedIndex] = GetMinimum(deletion, insertion, substitution);
                 }

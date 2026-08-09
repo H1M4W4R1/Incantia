@@ -25,7 +25,7 @@ namespace H1M4W4R1.Incantia.Editor
             speechEngine.SelectedModel = "whisper-tiny.en";
             speechEngine.SelectedLanguage = "en";
             speechEngine.TranslateToEnglish = false;
-            speechEngine.NumOfBeams = 3;
+            speechEngine.NumOfBeams = 1;
             speechEngine.Verbose = true;
 
             GameObject transcriberObject = new GameObject("Quin.AI Incantation Transcriber");

@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using H1M4W4R1.Incantia.Phonetics;
 
 namespace H1M4W4R1.Incantia.Matching
@@ -24,16 +23,27 @@ namespace H1M4W4R1.Incantia.Matching
             }
 
             ReadOnlySpan<PhonemeId> source = phonemes.AsSpan();
-            List<PhonemeId> consonants = new List<PhonemeId>(source.Length);
+            int consonantCount = 0;
             for (int phonemeIndex = 0; phonemeIndex < source.Length; phonemeIndex++)
             {
                 if (inventory.IsConsonant(source[phonemeIndex]))
                 {
-                    consonants.Add(source[phonemeIndex]);
+                    consonantCount++;
                 }
             }
 
-            return new PhoneticObservation(phonemes, new PhonemeSequence(consonants.ToArray()));
+            PhonemeId[] consonants = consonantCount == 0 ? Array.Empty<PhonemeId>() : new PhonemeId[consonantCount];
+            int consonantIndex = 0;
+            for (int phonemeIndex = 0; phonemeIndex < source.Length; phonemeIndex++)
+            {
+                PhonemeId phoneme = source[phonemeIndex];
+                if (inventory.IsConsonant(phoneme))
+                {
+                    consonants[consonantIndex++] = phoneme;
+                }
+            }
+
+            return new PhoneticObservation(phonemes, new PhonemeSequence(consonants));
         }
     }
 }

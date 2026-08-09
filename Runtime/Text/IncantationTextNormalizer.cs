@@ -16,9 +16,59 @@ namespace H1M4W4R1.Incantia.Text
             string canonicalText = text.Normalize(NormalizationForm.FormC).ToLowerInvariant();
             StringBuilder builder = new StringBuilder(canonicalText.Length);
             bool previousWasWhitespace = true;
+            int squareBracketDepth = 0;
+            int parenthesisDepth = 0;
             for (int characterIndex = 0; characterIndex < canonicalText.Length; characterIndex++)
             {
                 char character = canonicalText[characterIndex];
+                if (squareBracketDepth > 0)
+                {
+                    if (character == '[')
+                    {
+                        squareBracketDepth++;
+                    }
+                    else if (character == ']')
+                    {
+                        squareBracketDepth--;
+                    }
+
+                    continue;
+                }
+
+                if (parenthesisDepth > 0)
+                {
+                    if (character == '(')
+                    {
+                        parenthesisDepth++;
+                    }
+                    else if (character == ')')
+                    {
+                        parenthesisDepth--;
+                    }
+
+                    continue;
+                }
+
+                if (character == '[' || character == '(')
+                {
+                    if (!previousWasWhitespace)
+                    {
+                        builder.Append(' ');
+                        previousWasWhitespace = true;
+                    }
+
+                    if (character == '[')
+                    {
+                        squareBracketDepth = 1;
+                    }
+                    else
+                    {
+                        parenthesisDepth = 1;
+                    }
+
+                    continue;
+                }
+
                 if (char.IsWhiteSpace(character))
                 {
                     if (!previousWasWhitespace)

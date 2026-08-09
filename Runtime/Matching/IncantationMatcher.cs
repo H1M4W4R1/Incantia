@@ -38,8 +38,7 @@ namespace H1M4W4R1.Incantia.Matching
             CandidateScore second = default;
             CandidateScore triggerBest = default;
             CandidateScore triggerSecond = default;
-            CandidateScore partialBest = default;
-            CandidateScore partialSecond = default;
+            float observedInsertionCost = _distance.CalculateInsertionCost(observation.Phonemes.AsSpan());
             for (int incantationIndex = 0; incantationIndex < _incantations.Count; incantationIndex++)
             {
                 CompiledIncantation incantation = _incantations[incantationIndex];
@@ -48,7 +47,7 @@ namespace H1M4W4R1.Incantia.Matching
                     continue;
                 }
 
-                CandidateScore candidate = Evaluate(incantation, observation);
+                CandidateScore candidate = Evaluate(incantation, observation, observedInsertionCost);
                 if (!best.HasCandidate || candidate.Total > best.Total)
                 {
                     second = best;
@@ -57,20 +56,6 @@ namespace H1M4W4R1.Incantia.Matching
                 else if (!second.HasCandidate || candidate.Total > second.Total)
                 {
                     second = candidate;
-                }
-
-                CandidateScore partialCandidate = EvaluatePartialIncantation(incantation, observation);
-                if (partialCandidate.HasCandidate)
-                {
-                    if (!partialBest.HasCandidate || partialCandidate.Total > partialBest.Total)
-                    {
-                        partialSecond = partialBest;
-                        partialBest = partialCandidate;
-                    }
-                    else if (!partialSecond.HasCandidate || partialCandidate.Total > partialSecond.Total)
-                    {
-                        partialSecond = partialCandidate;
-                    }
                 }
 
                 if (!incantation.HasTrigger)
@@ -96,11 +81,14 @@ namespace H1M4W4R1.Incantia.Matching
             }
 
             float triggerMargin = triggerBest.HasCandidate ? triggerBest.Trigger - (triggerSecond.HasCandidate ? triggerSecond.Trigger : 0f) : 0f;
-            float partialMargin = partialBest.HasCandidate ? partialBest.Total - (partialSecond.HasCandidate ? partialSecond.Total : 0f) : 0f;
-            bool hasValidPartialIncantation = IsPartialIncantationAccepted(partialBest, partialMargin, observation.Phonemes.Length);
-            if (IsTriggerOnlyAccepted(triggerBest, triggerMargin, observation.Phonemes.Length) &&
-                (!Config.SuppressTriggerOnlyRecognitionDuringPartialIncantation || !hasValidPartialIncantation))
+            if (IsTriggerOnlyAccepted(triggerBest, triggerMargin, observation.Phonemes.Length))
             {
+                if (Config.SuppressTriggerOnlyRecognitionDuringPartialIncantation &&
+                    HasValidPartialIncantation(language, observation, observedInsertionCost))
+                {
+                    return new IncantationMatchResult(best, second, margin, false, IncantationMatchKind.None);
+                }
+
                 CandidateScore triggerOnlyBest = CreateTriggerOnlyCandidate(triggerBest);
                 CandidateScore triggerOnlySecond = triggerSecond.HasCandidate ? CreateTriggerOnlyCandidate(triggerSecond) : default;
                 return new IncantationMatchResult(triggerOnlyBest, triggerOnlySecond, triggerMargin, true, IncantationMatchKind.TriggerOnly);
@@ -109,7 +97,10 @@ namespace H1M4W4R1.Incantia.Matching
             return new IncantationMatchResult(best, second, margin, false, IncantationMatchKind.None);
         }
 
-        private CandidateScore Evaluate(CompiledIncantation incantation, in PhoneticObservation observation)
+        private CandidateScore Evaluate(
+            CompiledIncantation incantation,
+            in PhoneticObservation observation,
+            float observedInsertionCost)
         {
             float fullScore;
             int fullIncantationEndPhonemeIndex;
@@ -118,12 +109,17 @@ namespace H1M4W4R1.Incantia.Matching
                 fullScore = _distance.CalculateSubsequenceSimilarity(
                     incantation.Phonemes.AsSpan(),
                     observation.Phonemes.AsSpan(),
+                    incantation.FullReferenceDeletionCost,
                     _workspace,
                     out fullIncantationEndPhonemeIndex);
             }
             else
             {
-                fullScore = _distance.CalculateTerminalSimilarity(incantation.Phonemes.AsSpan(), observation.Phonemes.AsSpan(), _workspace);
+                fullScore = _distance.CalculateTerminalSimilarity(
+                    incantation.Phonemes.AsSpan(),
+                    observation.Phonemes.AsSpan(),
+                    incantation.FullReferenceDeletionCost,
+                    _workspace);
                 fullIncantationEndPhonemeIndex = observation.Phonemes.Length;
             }
             float consonantScore = CalculateConsonantScore(incantation, observation);
@@ -131,11 +127,14 @@ namespace H1M4W4R1.Incantia.Matching
             float triggerScore = 0f;
             if (incantation.HasTrigger)
             {
-                triggerScore = CalculateTriggerScore(incantation.TriggerPhonemes, observation.Phonemes, out triggerEndPhonemeIndex);
+                triggerScore = CalculateTriggerScore(
+                    incantation.TriggerPhonemes,
+                    incantation.TriggerReferenceDeletionCost,
+                    observation.Phonemes,
+                    out triggerEndPhonemeIndex);
             }
 
             float total = CalculateCompositeScore(incantation.HasTrigger, fullScore, consonantScore, triggerScore);
-            float observedInsertionCost = _distance.CalculateInsertionCost(observation.Phonemes.AsSpan());
             float observedLengthRatio = incantation.FullReferenceDeletionCost <= 0f
                 ? 0f
                 : observedInsertionCost / incantation.FullReferenceDeletionCost;
@@ -150,9 +149,12 @@ namespace H1M4W4R1.Incantia.Matching
                 triggerEndPhonemeIndex);
         }
 
-        private CandidateScore EvaluatePartialIncantation(CompiledIncantation incantation, in PhoneticObservation observation)
+        private CandidateScore EvaluatePartialIncantation(
+            CompiledIncantation incantation,
+            in PhoneticObservation observation,
+            float observedInsertionCost)
         {
-            if (!Config.SuppressTriggerOnlyRecognitionDuringPartialIncantation || incantation.Phonemes.Length <= 1)
+            if (incantation.Phonemes.Length <= 1)
             {
                 return default;
             }
@@ -161,21 +163,32 @@ namespace H1M4W4R1.Incantia.Matching
             ReadOnlySpan<PhonemeId> fullPhonemes = incantation.Phonemes.AsSpan();
             ReadOnlySpan<PhonemeId> fullConsonants = incantation.Consonants.AsSpan();
             int consonantCount = 0;
+            float partialReferenceDeletionCost = 0f;
+            float partialConsonantDeletionCost = 0f;
             for (int partialLength = 1; partialLength < fullPhonemes.Length; partialLength++)
             {
+                partialReferenceDeletionCost += _distance.CostModel.GetDeletionCost(fullPhonemes[partialLength - 1]);
                 if (_distance.CostModel.Inventory.IsConsonant(fullPhonemes[partialLength - 1]))
                 {
                     consonantCount++;
+                    partialConsonantDeletionCost += _distance.CostModel.GetDeletionCost(fullPhonemes[partialLength - 1]);
                 }
 
                 ReadOnlySpan<PhonemeId> partialPhonemes = fullPhonemes.Slice(0, partialLength);
-                float fullScore = _distance.CalculateTerminalSimilarity(partialPhonemes, observation.Phonemes.AsSpan(), _workspace);
-                float consonantScore = CalculatePartialConsonantScore(fullConsonants, consonantCount, observation);
+                float fullScore = _distance.CalculateTerminalSimilarity(
+                    partialPhonemes,
+                    observation.Phonemes.AsSpan(),
+                    partialReferenceDeletionCost,
+                    _workspace);
+                float consonantScore = CalculatePartialConsonantScore(
+                    fullConsonants,
+                    consonantCount,
+                    partialConsonantDeletionCost,
+                    observation);
                 float total = CalculateCompositeScore(false, fullScore, consonantScore, 0f);
-                float partialReferenceDeletionCost = _distance.CalculateDeletionCost(partialPhonemes);
                 float observedLengthRatio = partialReferenceDeletionCost <= 0f
                     ? 0f
-                    : _distance.CalculateInsertionCost(observation.Phonemes.AsSpan()) / partialReferenceDeletionCost;
+                    : observedInsertionCost / partialReferenceDeletionCost;
                 CandidateScore partial = new CandidateScore(
                     incantation,
                     total,
@@ -197,6 +210,7 @@ namespace H1M4W4R1.Incantia.Matching
         private float CalculatePartialConsonantScore(
             ReadOnlySpan<PhonemeId> fullConsonants,
             int consonantCount,
+            float referenceDeletionCost,
             in PhoneticObservation observation)
         {
             if (consonantCount == 0 && observation.Consonants.IsEmpty)
@@ -209,7 +223,11 @@ namespace H1M4W4R1.Incantia.Matching
                 return 0f;
             }
 
-            return _distance.CalculateTerminalSimilarity(fullConsonants.Slice(0, consonantCount), observation.Consonants.AsSpan(), _workspace);
+            return _distance.CalculateTerminalSimilarity(
+                fullConsonants.Slice(0, consonantCount),
+                observation.Consonants.AsSpan(),
+                referenceDeletionCost,
+                _workspace);
         }
 
         private float CalculateConsonantScore(CompiledIncantation incantation, in PhoneticObservation observation)
@@ -227,17 +245,35 @@ namespace H1M4W4R1.Incantia.Matching
             if (Config.AllowTrailingSpeech)
             {
                 int consonantEndPhonemeIndex;
-                return _distance.CalculateSubsequenceSimilarity(incantation.Consonants.AsSpan(), observation.Consonants.AsSpan(), _workspace, out consonantEndPhonemeIndex);
+                return _distance.CalculateSubsequenceSimilarity(
+                    incantation.Consonants.AsSpan(),
+                    observation.Consonants.AsSpan(),
+                    incantation.ConsonantReferenceDeletionCost,
+                    _workspace,
+                    out consonantEndPhonemeIndex);
             }
 
-            return _distance.CalculateTerminalSimilarity(incantation.Consonants.AsSpan(), observation.Consonants.AsSpan(), _workspace);
+            return _distance.CalculateTerminalSimilarity(
+                incantation.Consonants.AsSpan(),
+                observation.Consonants.AsSpan(),
+                incantation.ConsonantReferenceDeletionCost,
+                _workspace);
         }
 
-        private float CalculateTriggerScore(in PhonemeSequence trigger, in PhonemeSequence observed, out int triggerEndPhonemeIndex)
+        private float CalculateTriggerScore(
+            in PhonemeSequence trigger,
+            float triggerReferenceDeletionCost,
+            in PhonemeSequence observed,
+            out int triggerEndPhonemeIndex)
         {
             if (Config.AllowTrailingSpeech)
             {
-                return _distance.CalculateSubsequenceSimilarity(trigger.AsSpan(), observed.AsSpan(), _workspace, out triggerEndPhonemeIndex);
+                return _distance.CalculateSubsequenceSimilarity(
+                    trigger.AsSpan(),
+                    observed.AsSpan(),
+                    triggerReferenceDeletionCost,
+                    _workspace,
+                    out triggerEndPhonemeIndex);
             }
 
             triggerEndPhonemeIndex = observed.Length;
@@ -245,10 +281,17 @@ namespace H1M4W4R1.Incantia.Matching
             int maximumWindowLength = (trigger.Length * 2) + 4;
             int maximumLength = observedPhonemes.Length < maximumWindowLength ? observedPhonemes.Length : maximumWindowLength;
             float bestScore = 0f;
+            float windowInsertionCost = 0f;
             for (int windowLength = 1; windowLength <= maximumLength; windowLength++)
             {
                 ReadOnlySpan<PhonemeId> terminalWindow = observedPhonemes.Slice(observedPhonemes.Length - windowLength, windowLength);
-                float score = _distance.CalculateSimilarity(trigger.AsSpan(), terminalWindow, _workspace);
+                windowInsertionCost += _distance.CostModel.GetInsertionCost(terminalWindow[0]);
+                float score = _distance.CalculateSimilarity(
+                    trigger.AsSpan(),
+                    terminalWindow,
+                    triggerReferenceDeletionCost,
+                    windowInsertionCost,
+                    _workspace);
                 if (score > bestScore)
                 {
                     bestScore = score;
@@ -256,6 +299,48 @@ namespace H1M4W4R1.Incantia.Matching
             }
 
             return bestScore;
+        }
+
+        private bool HasValidPartialIncantation(
+            string language,
+            in PhoneticObservation observation,
+            float observedInsertionCost)
+        {
+            CandidateScore partialBest = default;
+            CandidateScore partialSecond = default;
+            for (int incantationIndex = 0; incantationIndex < _incantations.Count; incantationIndex++)
+            {
+                CompiledIncantation incantation = _incantations[incantationIndex];
+                if (ReferenceEquals(incantation, null) ||
+                    !string.Equals(incantation.Language, language, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                CandidateScore partialCandidate = EvaluatePartialIncantation(
+                    incantation,
+                    observation,
+                    observedInsertionCost);
+                if (!partialCandidate.HasCandidate)
+                {
+                    continue;
+                }
+
+                if (!partialBest.HasCandidate || partialCandidate.Total > partialBest.Total)
+                {
+                    partialSecond = partialBest;
+                    partialBest = partialCandidate;
+                }
+                else if (!partialSecond.HasCandidate || partialCandidate.Total > partialSecond.Total)
+                {
+                    partialSecond = partialCandidate;
+                }
+            }
+
+            float partialMargin = partialBest.HasCandidate
+                ? partialBest.Total - (partialSecond.HasCandidate ? partialSecond.Total : 0f)
+                : 0f;
+            return IsPartialIncantationAccepted(partialBest, partialMargin, observation.Phonemes.Length);
         }
 
         private float CalculateCompositeScore(bool hasTrigger, float fullScore, float consonantScore, float triggerScore)

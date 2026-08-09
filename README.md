@@ -6,7 +6,7 @@ For mastered quick spells, set `IncantationMatcherConfig.AllowTriggerOnlyRecogni
 
 ## Runtime flow
 
-1. Normalize the Whisper transcript with `IncantationTextNormalizer.Normalize`.
+1. Normalize the Whisper transcript with `IncantationTextNormalizer.Normalize`. ASR annotations in square brackets or regular parentheses, such as `[noise]`, `[BLANK_AUDIO]`, and `(background noise)`, are removed with their contents before phonemization.
 2. Convert it with the language-matched `IPhonemizer`.
 3. Build `PhoneticObservation` and call `IncantationMatcher.Match`.
 
@@ -36,8 +36,10 @@ Call `BeginRecording()` and `EndRecordingAndRecognize()` from your Unity UI. The
 
 ## Realtime spells
 
-Derive from `EnglishRealtimeIncantationRecognitionBehaviour` for continuous spells. Call `BeginListening()` and `StopListening()` from Unity UI. It captures non-overlapping 16 kHz microphone blocks, uses voice-activity gating, and queues each active block once while Whisper is busy. After Whisper returns, only the text is retained in a transcript cache; Incantia matches against that cache and sends callbacks on Unity's main thread. After a cast, it consumes the preceding text and that incantation only, preserving trailing words in the same Whisper result for the next cast. The default real-time matcher also suppresses quick triggers while a valid partial incantation is in progress. Override `OnRecognitionUpdated(...)` for live transcript/phoneme UI and `OnSpellRecognized(...)` for gameplay; rejected or ambiguous snapshots never call `OnSpellRecognized(...)`.
+Derive from `EnglishRealtimeIncantationRecognitionBehaviour` for continuous spells. Call `BeginListening()` and `StopListening()` from Unity UI. It captures non-overlapping 16 kHz microphone blocks, uses voice-activity gating, and starts with 0.75-second windows and one Whisper beam for low first-result latency. While Whisper is busy, queued windows are merged into one request; if inference falls far behind capture, the merged request is bounded to the newest `MaximumStepSizeInSeconds` of audio instead of replaying a stale queue. After Whisper returns, only the text is retained in a transcript cache, capped by `MaximumCachedTranscriptCharacters` (default `512`) so matching work stays bounded during long sessions. Incantia matches against that cache and sends callbacks on Unity's main thread. After a cast, it consumes the preceding text and that incantation only, preserving trailing words in the same Whisper result for the next cast. The default real-time matcher also suppresses quick triggers while a valid partial incantation is in progress. Override `OnRecognitionUpdated(...)` for live transcript/phoneme UI and `OnSpellRecognized(...)` for gameplay; rejected or ambiguous snapshots never call `OnSpellRecognized(...)`.
 
 Override `CreateMatcherConfig()` and enable `AllowTriggerOnlyRecognition` only for deliberately distinct quick-spell trigger words. The default high quick-spell threshold is `0.92`; tune it with real transcript samples before release.
+
+The matcher uses direct-indexed phoneme features, reuses compiled deletion costs, grows its rolling workspace geometrically, and calculates partial-prefix suppression only after a quick trigger otherwise qualifies. Keep `WhisperBeamCount` at `1` for minimum latency; increase it only when measured recognition accuracy is more important than response time. Automatic step sizing tracks smoothed inference time in both directions: it grows the capture window to prevent backlog, shrinks again after a temporary slowdown, and resets at the start of each listening session.
 
 Create `Assets/H1M4W4R1/Incantia/Examples/Scenes/RealtimeIncantationRecognitionExample.unity` from **Incantia - Create Realtime Recognition Example Scene**. The scene uses Unity UI/TextMeshPro to show the live Whisper text, normalized transcript, live phonemes, accepted spell and match kind, plus all eleven example spell triggers. It enables quick-spell recognition for demonstration purposes.

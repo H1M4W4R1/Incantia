@@ -7,9 +7,11 @@ namespace H1M4W4R1.Incantia.Phonetics
     {
         private float[] _previous = Array.Empty<float>();
         private float[] _current = Array.Empty<float>();
+        private float[] _insertionCosts = Array.Empty<float>();
 
         internal Span<float> Previous => _previous;
         internal Span<float> Current => _current;
+        internal Span<float> InsertionCosts => _insertionCosts;
 
         internal void EnsureCapacity(int requiredLength)
         {
@@ -18,8 +20,15 @@ namespace H1M4W4R1.Incantia.Phonetics
                 return;
             }
 
-            _previous = new float[requiredLength];
-            _current = new float[requiredLength];
+            int newLength = _previous.Length == 0 ? 16 : _previous.Length * 2;
+            if (newLength < requiredLength)
+            {
+                newLength = requiredLength;
+            }
+
+            _previous = new float[newLength];
+            _current = new float[newLength];
+            _insertionCosts = new float[newLength];
         }
 
         internal void SwapRows()

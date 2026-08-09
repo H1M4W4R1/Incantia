@@ -48,6 +48,22 @@ namespace H1M4W4R1.Incantia.Integration.QuinAI
             _engine = engine;
         }
 
+        /// <summary>Sets Whisper beam search width. One beam provides the lowest latency for real-time recognition.</summary>
+        public void SetBeamCount(int beamCount)
+        {
+            if (beamCount < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(beamCount));
+            }
+
+            if (ReferenceEquals(_engine, null) || !_engine)
+            {
+                throw new InvalidOperationException("Assign a Quin.AI SpeechEngine before setting its beam count.");
+            }
+
+            _engine.NumOfBeams = beamCount;
+        }
+
         /// <summary>
         /// Enqueues audio for transcription from any thread. The component calls Quin.AI's queue on its next Unity main-thread update.
         /// </summary>
