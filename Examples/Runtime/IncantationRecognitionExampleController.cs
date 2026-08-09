@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using System.Threading.Tasks;
 using H1M4W4R1.Incantia.Database;
 using H1M4W4R1.Incantia.Integration.QuinAI;
 using H1M4W4R1.Incantia.Matching;
@@ -15,9 +14,9 @@ using UnityEngine.UI;
 
 namespace H1M4W4R1.Incantia.Examples
 {
-    /// <summary>Playable Unity UI example for microphone-to-spell recognition with Quin.AI Whisper.</summary>
+    /// <summary>Playable Unity UI example derived from the reusable English Quin.AI recognition behavior.</summary>
     [DisallowMultipleComponent]
-    public sealed class IncantationRecognitionExampleController : MonoBehaviour
+    public sealed class IncantationRecognitionExampleController : EnglishIncantationRecognitionBehaviour
     {
         private readonly struct ExampleSpell
         {
@@ -48,7 +47,6 @@ namespace H1M4W4R1.Incantia.Examples
             new ExampleSpell("Fireball", "Flame of the ancient sun, hear my prayer. Gather within my hand, burn away the darkness, and strike my foe. Fireball!", "Fireball")
         };
 
-        [SerializeField] private QuinAiIncantationTranscriber _transcriber;
         [SerializeField] private Canvas _canvas;
         [SerializeField] private Button _recordButton;
         [SerializeField] private TMP_Text _recordButtonText;
@@ -58,20 +56,6 @@ namespace H1M4W4R1.Incantia.Examples
         [SerializeField] private TMP_Text _phonemesText;
         [SerializeField] private TMP_Text _recognitionText;
         [SerializeField] private TMP_Text _spellsText;
-        [SerializeField] private int _maximumRecordingSeconds = 45;
-
-        private EnglishPhonemizer _phonemizer;
-        private IncantationRecognizer _recognizer;
-        private AudioClip _recordingClip;
-        private bool _isRecording;
-        private bool _isRecognizing;
-        private long _nextSequence;
-
-        /// <summary>Assigns the scene's Quin.AI bridge before play mode.</summary>
-        public void SetTranscriber(QuinAiIncantationTranscriber transcriber)
-        {
-            _transcriber = transcriber ?? throw new ArgumentNullException(nameof(transcriber));
-        }
 
         /// <summary>Builds the complete visible UI with Unity UI and TextMeshPro components.</summary>
         public void BuildUserInterface()
@@ -90,149 +74,91 @@ namespace H1M4W4R1.Incantia.Examples
             _spellsText = CreateScrollableText(panel, "Spells", CreateSpellListText(), 15f, 165f);
         }
 
-        private void Awake()
+        protected override void Awake()
         {
             if (ReferenceEquals(_canvas, null) || !_canvas)
             {
                 BuildUserInterface();
             }
+
+            base.Awake();
         }
 
         private void Start()
         {
-            if (ReferenceEquals(_transcriber, null) || !_transcriber)
-            {
-                SetStatus("Setup error: assign QuinAiIncantationTranscriber.", new Color(1f, 0.35f, 0.35f));
-                _recordButton.interactable = false;
-                return;
-            }
-
-            BuildRecognizer();
             _recordButton.onClick.AddListener(OnRecordButtonClicked);
             _recordButton.interactable = false;
             SetStatus("Whisper: loading model...", new Color(0.48f, 0.82f, 1f));
         }
 
-        private void Update()
+        protected override void AddIncantationDefinitions(List<IncantationDefinition> definitions)
         {
-            if (!_isRecording && !_isRecognizing && _transcriber && _transcriber.IsReady && !_recordButton.interactable)
+            for (int spellIndex = 0; spellIndex < ExampleSpells.Length; spellIndex++)
             {
-                _recordButton.interactable = true;
-                SetStatus("Whisper ready. Press RECORD, speak an incantation, then press STOP.", new Color(0.48f, 1f, 0.62f));
+                ExampleSpell spell = ExampleSpells[spellIndex];
+                definitions.Add(new IncantationDefinition(spell.SpellId, "en", spell.Text, spell.Trigger));
             }
         }
 
-        private void OnDestroy()
+        protected override void OnWhisperReady()
         {
-            if (_isRecording)
-            {
-                Microphone.End(null);
-            }
+            _recordButton.interactable = true;
+            SetStatus("Whisper ready. Press RECORD, speak one complete incantation, then press STOP.", new Color(0.48f, 1f, 0.62f));
         }
 
-        private void OnRecordButtonClicked()
+        protected override void OnRecordingStarted()
         {
-            if (_isRecognizing)
-            {
-                return;
-            }
-
-            if (!_isRecording)
-            {
-                StartRecording();
-                return;
-            }
-
-            StopRecordingAndRecognize();
-        }
-
-        private void StartRecording()
-        {
-            _recordingClip = Microphone.Start(null, false, _maximumRecordingSeconds, 16000);
-            if (ReferenceEquals(_recordingClip, null))
-            {
-                SetStatus("Microphone could not start.", new Color(1f, 0.35f, 0.35f));
-                return;
-            }
-
-            _isRecording = true;
             _recordButtonText.text = "STOP";
             SetStatus("Recording… speak one complete incantation.", new Color(1f, 0.82f, 0.35f));
         }
 
-        private void StopRecordingAndRecognize()
+        protected override void OnRecordingFailed(string message)
         {
-            int frameCount = Microphone.GetPosition(null);
-            AudioClip clip = _recordingClip;
-            Microphone.End(null);
-            _isRecording = false;
             _recordButtonText.text = "RECORD";
-            if (ReferenceEquals(clip, null) || frameCount <= 0)
-            {
-                SetStatus("No microphone samples were captured.", new Color(1f, 0.35f, 0.35f));
-                return;
-            }
-
-            float[] samples = GetMonoSamples(clip, frameCount);
-            if (ReferenceEquals(samples, null))
-            {
-                SetStatus("Microphone samples could not be read.", new Color(1f, 0.35f, 0.35f));
-                return;
-            }
-
-            RecognizeSamplesAsync(samples);
+            _recordButton.interactable = IsReady;
+            SetStatus(message, new Color(1f, 0.35f, 0.35f));
         }
 
-        private async void RecognizeSamplesAsync(float[] samples)
+        protected override void OnRecognitionStarted()
         {
-            _isRecognizing = true;
+            _recordButtonText.text = "RECORD";
             _recordButton.interactable = false;
             SetStatus("Whisper is transcribing…", new Color(0.48f, 0.82f, 1f));
-            try
-            {
-                IncantationRecognitionRequest request = new IncantationRecognitionRequest(samples, 16000, "en", _nextSequence++);
-                IncantationRecognitionResult result = await _recognizer.RecognizeAsync(request);
-                DisplayResult(result);
-            }
-            catch (Exception exception)
-            {
-                SetStatus($"Recognition failed: {exception.Message}", new Color(1f, 0.35f, 0.35f));
-            }
-            finally
-            {
-                _isRecognizing = false;
-                if (_transcriber && _transcriber.IsReady)
-                {
-                    _recordButton.interactable = true;
-                }
-            }
         }
 
-        private void BuildRecognizer()
+        protected override void OnRecognitionCompleted(in IncantationRecognitionResult result)
         {
-            _phonemizer = new EnglishPhonemizer();
-            PhonemeCostModel costModel = EnglishPhonemeProfile.CreateCostModel();
-            WeightedPhonemeDistance distance = new WeightedPhonemeDistance(costModel);
-            IncantationCompiler compiler = new IncantationCompiler(_phonemizer, distance);
-            List<CompiledIncantation> compiledIncantations = new List<CompiledIncantation>(ExampleSpells.Length);
-            for (int spellIndex = 0; spellIndex < ExampleSpells.Length; spellIndex++)
+            DisplayResult(result);
+            _recordButton.interactable = IsReady;
+        }
+
+        protected override void OnRecognitionFailed(Exception exception)
+        {
+            _recordButton.interactable = IsReady;
+            SetStatus($"Recognition failed: {exception.Message}", new Color(1f, 0.35f, 0.35f));
+        }
+
+        private void OnRecordButtonClicked()
+        {
+            if (IsRecognizing)
             {
-                ExampleSpell spell = ExampleSpells[spellIndex];
-                _phonemizer.RegisterFallbackPronunciation(spell.Text);
-                _phonemizer.RegisterFallbackPronunciation(spell.Trigger);
-                IncantationDefinition definition = new IncantationDefinition(spell.SpellId, "en", spell.Text, spell.Trigger);
-                compiledIncantations.Add(compiler.Compile(definition));
+                return;
             }
 
-            IncantationMatcher matcher = new IncantationMatcher(compiledIncantations, distance, new IncantationMatcherConfig());
-            _recognizer = new IncantationRecognizer(_transcriber, _phonemizer, costModel.Inventory, matcher);
+            if (IsRecording)
+            {
+                EndRecordingAndRecognize();
+                return;
+            }
+
+            BeginRecording();
         }
 
         private void DisplayResult(in IncantationRecognitionResult result)
         {
             _transcriptText.text = $"WHISPER TRANSCRIPT\n{DisplayOrPlaceholder(result.Transcript)}";
             _normalizedText.text = $"NORMALIZED TEXT\n{DisplayOrPlaceholder(result.NormalizedTranscript)}";
-            _phonemesText.text = $"OBSERVED PHONEMES ({result.ObservedPhonemeCount})\n{FormatPhonemes(result.NormalizedTranscript)}";
+            SetScrollableText(_phonemesText, $"OBSERVED PHONEMES ({result.ObservedPhonemeCount})\n{FormatPhonemes(result.NormalizedTranscript)}");
             if (result.Accepted)
             {
                 CandidateScore best = result.Match.Best;
@@ -247,36 +173,6 @@ namespace H1M4W4R1.Incantia.Examples
             SetStatus("No spell cast. See rejection reason and candidate score below.", new Color(1f, 0.6f, 0.35f));
         }
 
-        private float[] GetMonoSamples(AudioClip clip, int frameCount)
-        {
-            int channelCount = clip.channels;
-            float[] interleavedSamples = new float[frameCount * channelCount];
-            if (!clip.GetData(interleavedSamples, 0))
-            {
-                return null;
-            }
-
-            if (channelCount == 1)
-            {
-                return interleavedSamples;
-            }
-
-            float[] monoSamples = new float[frameCount];
-            for (int frameIndex = 0; frameIndex < frameCount; frameIndex++)
-            {
-                float frameTotal = 0f;
-                int offset = frameIndex * channelCount;
-                for (int channelIndex = 0; channelIndex < channelCount; channelIndex++)
-                {
-                    frameTotal += interleavedSamples[offset + channelIndex];
-                }
-
-                monoSamples[frameIndex] = frameTotal / channelCount;
-            }
-
-            return monoSamples;
-        }
-
         private string FormatPhonemes(string normalizedText)
         {
             if (string.IsNullOrEmpty(normalizedText))
@@ -284,7 +180,7 @@ namespace H1M4W4R1.Incantia.Examples
                 return "—";
             }
 
-            PhonemeSequence phonemes = _phonemizer.Phonemize(normalizedText);
+            PhonemeSequence phonemes = Phonemizer.Phonemize(normalizedText);
             StringBuilder builder = new StringBuilder(phonemes.Length * 4);
             ReadOnlySpan<PhonemeId> source = phonemes.AsSpan();
             for (int phonemeIndex = 0; phonemeIndex < source.Length; phonemeIndex++)
@@ -327,6 +223,20 @@ namespace H1M4W4R1.Incantia.Examples
         private static string DisplayOrPlaceholder(string text)
         {
             return string.IsNullOrEmpty(text) ? "—" : text;
+        }
+
+        private static void SetScrollableText(TMP_Text text, string content)
+        {
+            text.text = content;
+            text.rectTransform.sizeDelta = new Vector2(0f, text.preferredHeight);
+            Canvas.ForceUpdateCanvases();
+            LayoutRebuilder.ForceRebuildLayoutImmediate(text.rectTransform);
+            ScrollRect scrollRect = text.GetComponentInParent<ScrollRect>();
+            if (scrollRect)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(scrollRect.content);
+                scrollRect.verticalNormalizedPosition = 1f;
+            }
         }
 
         private void EnsureCanvas()
@@ -451,6 +361,8 @@ namespace H1M4W4R1.Incantia.Examples
             contentTransform.anchorMax = new Vector2(1f, 1f);
             contentTransform.pivot = new Vector2(0.5f, 1f);
             contentTransform.anchoredPosition = Vector2.zero;
+            contentTransform.offsetMin = Vector2.zero;
+            contentTransform.offsetMax = Vector2.zero;
             TextMeshProUGUI text = contentObject.GetComponent<TextMeshProUGUI>();
             text.font = TMP_Settings.defaultFontAsset;
             text.fontSize = fontSize;
@@ -459,6 +371,7 @@ namespace H1M4W4R1.Incantia.Examples
             text.textWrappingMode = TextWrappingModes.Normal;
             text.overflowMode = TextOverflowModes.Overflow;
             text.alignment = TextAlignmentOptions.TopLeft;
+            text.raycastTarget = false;
             ContentSizeFitter fitter = contentObject.GetComponent<ContentSizeFitter>();
             fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
             fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;

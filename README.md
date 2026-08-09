@@ -25,3 +25,9 @@ The adapter queues calls from any thread and invokes Quin.AI's request queue on 
 Create `Assets/H1M4W4R1/Incantia/Examples/Scenes/IncantationRecognitionExample.unity` from **Incantia → Create Recognition Example Scene**. It uses only Unity UI/TextMeshPro—not IMGUI—and displays the Whisper transcript, normalized text, observed phonemes, best spell, component scores, margin, and rejection reason.
 
 The scene includes Meteor, Blink, Arcane Barrier, Dark Sphere, Holy Ray, Heal, Stone Wall, Wind Blade, Lightning Bolt, Ice Lance, and Fireball. Press **RECORD**, speak one full incantation, then press **STOP**. The supplied `whisper-tiny.en` model loads locally; it may take several seconds before the record button becomes available.
+
+## Reusable game behavior
+
+Derive a component from `EnglishIncantationRecognitionBehaviour`, assign a `QuinAiIncantationTranscriber`, and override `AddIncantationDefinitions(...)`. Use `ConfigurePhonemizer(...)` for reviewed fantasy-word pronunciations. Connect UI and gameplay by overriding `OnWhisperReady`, `OnRecordingStarted`, `OnRecognitionStarted`, `OnRecognitionCompleted`, and failure callbacks; no public C# events or UnityEvents are required.
+
+Call `BeginRecording()` and `EndRecordingAndRecognize()` from your Unity UI. The base behavior handles 16 kHz microphone capture, stereo-to-mono conversion, reference compilation, Whisper submission, and matching. [IncantationRecognitionExampleController.cs](Examples/Runtime/IncantationRecognitionExampleController.cs) is the working reference implementation.
