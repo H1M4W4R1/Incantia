@@ -1,45 +1,146 @@
 # Incantia
 
-Incantia provides Unity-independent, closed-set phonetic matching for spell incantations. It accepts a phoneme stream produced by a language-specific `IPhonemizer`, compares each spell against the terminal portion of the transcript, and only accepts a winner when score, score margin, trigger, and length safeguards pass. Unrelated speech before a complete, terminal incantation does not lower its full or consonant score.
+Incantia is a closed-set, phonetic spell recognizer for Unity. It turns a speech transcript into phonemes, compares the end of that transcript with a known list of incantations, and accepts a spell only when its score and lead over competing spells are strong enough.
 
-For mastered quick spells, set `IncantationMatcherConfig.AllowTriggerOnlyRecognition` to `true`. This is a secondary path used only when full-incantation acceptance fails; it requires a complete terminal trigger, `MinimumTriggerOnlyScore` (default `0.92`), and `MinimumTriggerOnlyMargin` (default `0.12`). Give every quick spell a distinctive trigger. Set `SuppressTriggerOnlyRecognitionDuringPartialIncantation` to prevent a quick trigger from firing while the terminal transcript is a valid unfinished prefix of any configured incantation; the partial check uses the same score, margin, and length safeguards as full recognition.
+Incantia provides:
 
-## Runtime flow
+- Offline English phonemization and configurable phoneme-distance matching.
+- Full-incantation and optional trigger-only recognition.
+- Transcript cleanup for annotations such as `[noise]` and `(background noise)`.
+- A reusable real-time microphone integration for Quin.AI Whisper.
+- A generated example scene with live recognition diagnostics.
 
-1. Normalize the Whisper transcript with `IncantationTextNormalizer.Normalize`. ASR annotations in square brackets or regular parentheses, such as `[noise]`, `[BLANK_AUDIO]`, and `(background noise)`, are removed with their contents before phonemization.
-2. Convert it with the language-matched `IPhonemizer`.
-3. Build `PhoneticObservation` and call `IncantationMatcher.Match`.
+## Quick start
 
-`IncantationCompiler` precomputes reference phonemes. Create a separate `IncantationMatcher` for each worker thread because its rolling alignment workspace is reused.
+1. Download the latest release of [Unity Realtime Voice Transcription](https://github.com/InboraStudio/Unity-Realtime-voice-transcription/releases) and import it into the Unity project. Skip this step if the project already contains `Assets/Quin.AI`.
+2. Import the `Assets/H1M4W4R1/Incantia` folder.
+3. Install the `whisper-tiny.en` model through the transcription package. In this repository, the model is stored at `Assets/StreamingAssets/Undertone/whisper-tiny.en.bytes`.
+4. Save the current scene, then select **Incantia > Create Realtime Recognition Example Scene**. The command creates `Assets/H1M4W4R1/Incantia/Examples/Scenes/RealtimeIncantationRecognitionExample.unity`.
+5. Enter Play mode, wait for **Whisper ready**, press **LISTEN**, and speak one of the incantations shown in the scene.
 
-`EnglishPhonemizer` provides the first offline profile: a built-in spell/ASR pronunciation dictionary plus deterministic spelling-to-sound fallback for unknown Whisper words. Reference compilation is intentionally strict: register every word or phrase outside the built-in lexicon—especially fantasy terms—with `RegisterPronunciation(...)` before compiling it. Create the matching inventory and default English confusion costs with `EnglishPhonemeProfile.CreateCostModel()`.
+The example keeps listening after a successful cast. Press **STOP** to end microphone capture.
 
-The package does not provide a Whisper implementation. Speech transcription remains replaceable and must provide the selected language's transcript to the phonemizer.
+## Dependencies
 
-## Quin.AI Whisper integration
+| Dependency | Required for | Notes |
+| --- | --- | --- |
+| [Unity Realtime Voice Transcription](https://github.com/InboraStudio/Unity-Realtime-voice-transcription) | Microphone-to-text recognition and the supplied Quin.AI integration | Import its Quin.AI/Undertone runtime and install an English Whisper model. |
+| Unity microphone access | Real-time and recorded speech input | The player must have permission to use a microphone. |
+| Unity UI (`com.unity.ugui`) | Generated example scene | Not required by the core matcher. |
+| TextMesh Pro | Generated example scene | Not required by the core matcher. |
 
-`QuinAiIncantationTranscriber` adapts the existing Quin.AI `SpeechEngine` to a text transcription provider. Add it to a GameObject, assign an already configured `SpeechEngine`, then pass its transcript to `IncantationRecognizer.Recognize(...)` with the matching `IPhonemizer`, its `PhonemeInventory`, and `IncantationMatcher`.
+This repository is developed with Unity `6000.5.2f1`. The core assembly, `H1M4W4R1.Incantia.Runtime`, has no Unity Engine dependency. You can use the matcher with another transcription provider by passing its text into `IncantationRecognizer`.
 
-The adapter queues audio calls from any thread and invokes Quin.AI's request queue on Unity's main thread. Quin.AI performs native Whisper inference in its own serialized worker task, then returns a transcript. Incantia does not receive audio samples or depend on Whisper; it synchronously normalizes, phonemizes, matches, and accepts that text. Set the engine to the requested language, leave `TranslateToEnglish` disabled, and supply mono 16 kHz PCM samples only to the transcriber. Wait for `QuinAiIncantationTranscriber.IsReady` before submitting a request.
+## Add Incantia to a game
 
-## Playable example scene
+Create a component derived from `EnglishRealtimeIncantationRecognitionBehaviour`. Define the supported spells and handle accepted results through the protected callbacks:
 
-Create `Assets/H1M4W4R1/Incantia/Examples/Scenes/IncantationRecognitionExample.unity` from **Incantia → Create Recognition Example Scene**. It uses only Unity UI/TextMeshPro—not IMGUI—and displays the Whisper transcript, normalized text, observed phonemes, best spell, component scores, margin, and rejection reason.
+```csharp
+using System.Collections.Generic;
+using H1M4W4R1.Incantia.Database;
+using H1M4W4R1.Incantia.Integration.QuinAI;
+using H1M4W4R1.Incantia.Recognition;
+using UnityEngine;
 
-The scene includes Meteor, Blink, Arcane Barrier, Dark Sphere, Holy Ray, Heal, Stone Wall, Wind Blade, Lightning Bolt, Ice Lance, and Fireball. Press **RECORD**, speak one full incantation, then press **STOP**. The supplied `whisper-tiny.en` model loads locally; it may take several seconds before the record button becomes available.
+namespace MyGame.Spells
+{
+    public sealed class PlayerSpellRecognizer : EnglishRealtimeIncantationRecognitionBehaviour
+    {
+        protected override void AddIncantationDefinitions(List<IncantationDefinition> definitions)
+        {
+            definitions.Add(new IncantationDefinition(
+                "Fireball",
+                "en",
+                "Flame of the ancient sun, gather in my hand. Fireball!",
+                "Fireball"));
+        }
 
-## Reusable game behavior
+        protected override void OnSpellRecognized(in IncantationRecognitionResult result)
+        {
+            string spellId = result.Match.Best.Incantation.SpellId;
+            Debug.Log($"Cast {spellId}");
+        }
+    }
+}
+```
 
-Derive a component from `EnglishIncantationRecognitionBehaviour`, assign a `QuinAiIncantationTranscriber`, and override `AddIncantationDefinitions(...)`. Use `ConfigurePhonemizer(...)` for reviewed fantasy-word pronunciations. Connect UI and gameplay by overriding `OnWhisperReady`, `OnRecordingStarted`, `OnRecognitionStarted`, `OnRecognitionCompleted`, and failure callbacks; no public C# events or UnityEvents are required.
+Then configure the scene:
 
-Call `BeginRecording()` and `EndRecordingAndRecognize()` from your Unity UI. The base behavior handles 16 kHz microphone capture, stereo-to-mono conversion, reference compilation, Whisper submission, and matching. [IncantationRecognitionExampleController.cs](Examples/Runtime/IncantationRecognitionExampleController.cs) is the working reference implementation.
+1. Add a Quin.AI `SpeechEngine` and select `whisper-tiny.en`, language `en`, with **Translate To English** disabled.
+2. Add `QuinAiIncantationTranscriber`, then assign the `SpeechEngine` to it.
+3. Add the derived recognition component, then assign the transcriber to it.
+4. Call `BeginListening()` and `StopListening()` from the game's UI or input code.
 
-## Realtime spells
+Use `OnWhisperReady()`, `OnListeningStarted()`, `OnListeningStopped()`, `OnRecognitionUpdated(...)`, and `OnRecognitionFailed(...)` for status and diagnostic UI. Rejected or ambiguous transcripts never invoke `OnSpellRecognized(...)`.
 
-Derive from `EnglishRealtimeIncantationRecognitionBehaviour` for continuous spells. Call `BeginListening()` and `StopListening()` from Unity UI. It captures non-overlapping 16 kHz microphone blocks and uses voice-activity gating. **Capture Step Size In Seconds** defaults to `0.25` seconds so phrase endings are observed quickly; it no longer grows with Whisper inference time. Active samples are retained and the complete cache is retranscribed as new context arrives, including samples captured while Whisper is busy. **Minimum New Audio Duration For Recognition** defaults to `0.75` seconds and prevents redundant submissions when inference is faster than capture. Set **Maximum Cached Audio Duration In Seconds** for the desired context window (default `30` seconds); the implementation clamps it to a hard `120`-second ceiling and discards the oldest samples on overflow. After a cast, the matcher's phoneme endpoint is mapped proportionally to the submitted samples because the Quin.AI backend does not provide word timestamps. Incantia consumes the preceding audio through that accepted phrase while preserving later and newly captured samples for the next cast. The default real-time matcher also suppresses quick triggers while a valid partial incantation is in progress. Override `OnRecognitionUpdated(...)` for live transcript/phoneme UI and `OnSpellRecognized(...)` for gameplay; rejected or ambiguous snapshots never call `OnSpellRecognized(...)`.
+The complete working implementation is [RealtimeIncantationRecognitionExampleController.cs](Examples/Runtime/RealtimeIncantationRecognitionExampleController.cs).
 
-Override `CreateMatcherConfig()` and enable `AllowTriggerOnlyRecognition` only for deliberately distinct quick-spell trigger words. The default high quick-spell threshold is `0.92`; tune it with real transcript samples before release.
+## Incantation definitions and pronunciations
 
-The matcher uses direct-indexed phoneme features, reuses compiled deletion costs, grows its rolling workspace geometrically, and calculates partial-prefix suppression only after a quick trigger otherwise qualifies. Growing-cache passes always use one Whisper beam for minimum latency. At the end of a phrase, Incantia first performs the same fast one-beam pass; only a rejected result is retried with the configured **Final Whisper Beam Count**. This keeps successful detection responsive while preserving an opt-in multi-beam accuracy fallback.
+Each `IncantationDefinition` contains:
 
-Create `Assets/H1M4W4R1/Incantia/Examples/Scenes/RealtimeIncantationRecognitionExample.unity` from **Incantia - Create Realtime Recognition Example Scene**. The scene uses Unity UI/TextMeshPro to show the live Whisper text, normalized transcript, live phonemes, accepted spell and match kind, plus all eleven example spell triggers. It enables quick-spell recognition for demonstration purposes.
+| Value | Purpose |
+| --- | --- |
+| `SpellId` | Stable identifier returned to gameplay code. |
+| `Language` | Language identifier; the supplied profile uses `en`. |
+| `Text` | Full spoken incantation. |
+| `TriggerText` | Optional distinctive ending used for trigger scoring and quick-spell recognition. |
+
+`EnglishPhonemizer` includes a small built-in pronunciation dictionary and a deterministic spelling-to-sound fallback. Override `ConfigurePhonemizer(...)` and call `RegisterPronunciation(...)` for fantasy names or other words whose generated pronunciation is not correct.
+
+## Recognition modes
+
+### Full incantations
+
+Full-incantation recognition is enabled by default. Unrelated speech before a complete incantation does not lower the match score because Incantia aligns candidates against the terminal portion of the transcript.
+
+### Quick trigger words
+
+Trigger-only recognition is opt-in. Enable it only for short, distinctive trigger phrases:
+
+```csharp
+protected override IncantationMatcherConfig CreateMatcherConfig()
+{
+    IncantationMatcherConfig config = base.CreateMatcherConfig();
+    config.AllowTriggerOnlyRecognition = true;
+    config.MinimumTriggerOnlyScore = 0.92f;
+    config.MinimumTriggerOnlyMargin = 0.12f;
+    return config;
+}
+```
+
+The default real-time configuration suppresses a trigger-only cast while the transcript is still a valid unfinished prefix of a longer incantation. Tune trigger thresholds with recordings from the microphones and environments used by the game.
+
+## Real-time behavior
+
+`EnglishRealtimeIncantationRecognitionBehaviour` captures non-overlapping 16 kHz microphone blocks, applies voice-activity gating, and retranscribes a bounded audio cache as new context arrives.
+
+Important inspector settings:
+
+| Setting | Default | Effect |
+| --- | ---: | --- |
+| Capture Step Size In Seconds | `0.25` | How often new microphone samples are collected. |
+| Minimum New Audio Duration For Recognition | `0.75` | Minimum new cached audio before another Whisper request. |
+| Maximum Cached Audio Duration In Seconds | `30` | Context window; hard-limited to 120 seconds. |
+| Final Whisper Beam Count | `1` | Beam count for the optional retry after a rejected end-of-phrase pass. |
+
+Growing-cache recognition always uses one Whisper beam for lower latency. At the end of a phrase, a rejected one-beam result can be retried with **Final Whisper Beam Count**. After an accepted match, Incantia removes the audio through that phrase and preserves later samples for the next cast.
+
+## Core recognition flow
+
+For a custom transcription provider:
+
+1. Normalize its transcript with `IncantationTextNormalizer.Normalize(...)`.
+2. Convert the normalized text with a language-matched `IPhonemizer`.
+3. Build a `PhoneticObservation` and call `IncantationMatcher.Match(...)`, or use `IncantationRecognizer.Recognize(...)` to run the complete text pipeline.
+
+`IncantationCompiler` precomputes reference phonemes. Create one `IncantationMatcher` per worker thread because each matcher reuses its own rolling alignment workspace.
+
+## Troubleshooting
+
+| Symptom | Check |
+| --- | --- |
+| **LISTEN** stays disabled | Confirm the selected Whisper model exists and wait for `QuinAiIncantationTranscriber.IsReady`. |
+| No microphone audio | Confirm OS microphone permission and that Unity can see the intended input device. |
+| Fantasy words match poorly | Register a reviewed pronunciation in `ConfigurePhonemizer(...)`. |
+| Short words cast the wrong spell | Disable trigger-only recognition or increase its score and margin thresholds. |
