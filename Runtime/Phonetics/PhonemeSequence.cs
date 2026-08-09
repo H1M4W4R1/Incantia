@@ -27,4 +27,12 @@ namespace H1M4W4R1.Incantia.Phonetics
         string Language { get; }
         PhonemeSequence Phonemize(string text);
     }
+
+    /// <summary>
+    /// Adds strict reference phonemization. Unknown reference words must fail compilation instead of being silently discarded.
+    /// </summary>
+    public interface IReferencePhonemizer : IPhonemizer
+    {
+        PhonemeSequence PhonemizeReference(string text);
+    }
 }

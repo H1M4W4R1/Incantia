@@ -1,0 +1,46 @@
+namespace H1M4W4R1.Incantia.Phonetics.English
+{
+    /// <summary>Stress-free ARPAbet-compatible phonemes used by the built-in English profile.</summary>
+    public enum EnglishPhoneme : ushort
+    {
+        AA = 1,
+        AE = 2,
+        AH = 3,
+        AO = 4,
+        AW = 5,
+        AY = 6,
+        EH = 7,
+        ER = 8,
+        EY = 9,
+        IH = 10,
+        IY = 11,
+        OW = 12,
+        OY = 13,
+        UH = 14,
+        UW = 15,
+        B = 16,
+        CH = 17,
+        D = 18,
+        DH = 19,
+        F = 20,
+        G = 21,
+        HH = 22,
+        JH = 23,
+        K = 24,
+        L = 25,
+        M = 26,
+        N = 27,
+        NG = 28,
+        P = 29,
+        R = 30,
+        S = 31,
+        SH = 32,
+        T = 33,
+        TH = 34,
+        V = 35,
+        W = 36,
+        Y = 37,
+        Z = 38,
+        ZH = 39
+    }
+}

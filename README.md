@@ -10,4 +10,6 @@ Incantia provides Unity-independent, closed-set phonetic matching for spell inca
 
 `IncantationCompiler` precomputes reference phonemes. Create a separate `IncantationMatcher` for each worker thread because its rolling alignment workspace is reused.
 
-The package deliberately does not provide a grapheme-to-phoneme or Whisper implementation. Those backends remain replaceable so each supported language can supply its own pronunciation data and transcription integration.
+`EnglishPhonemizer` provides the first offline profile: a built-in spell/ASR pronunciation dictionary plus deterministic spelling-to-sound fallback for unknown Whisper words. Reference compilation is intentionally strict: register every word or phrase outside the built-in lexicon—especially fantasy terms—with `RegisterPronunciation(...)` before compiling it. Create the matching inventory and default English confusion costs with `EnglishPhonemeProfile.CreateCostModel()`.
+
+The package does not provide a Whisper implementation. Speech transcription remains replaceable and must provide the selected language's transcript to the phonemizer.

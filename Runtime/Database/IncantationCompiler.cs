@@ -49,7 +49,9 @@ namespace H1M4W4R1.Incantia.Database
         private PhonemeSequence PhonemizeRequired(string text, string fieldName)
         {
             string normalizedText = IncantationTextNormalizer.Normalize(text);
-            PhonemeSequence phonemes = _phonemizer.Phonemize(normalizedText);
+            PhonemeSequence phonemes = _phonemizer is IReferencePhonemizer referencePhonemizer
+                ? referencePhonemizer.PhonemizeReference(normalizedText)
+                : _phonemizer.Phonemize(normalizedText);
             if (phonemes.IsEmpty)
             {
                 throw new InvalidOperationException($"The phonemizer produced no phonemes for {fieldName}.");
